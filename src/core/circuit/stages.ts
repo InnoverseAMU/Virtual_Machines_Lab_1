@@ -91,6 +91,28 @@ export function getStageCameraPresets(stage: StageDef): CameraPresetDef[] {
     : DEFAULT_CAMERA_PRESETS;
 }
 
+export interface StageTerminalNetInfo {
+  netIndex: number;
+  label: string;
+}
+
+/**
+ * Finds which canonical stage net a terminal belongs to (for Observe mode tooltips and highlighting).
+ */
+export function findStageTerminalNetInfo(
+  stage: StageDef,
+  terminalId: TerminalId,
+): StageTerminalNetInfo | null {
+  const netlist = stage.acceptedNetlists[0];
+  if (!netlist) return null;
+  const netIndex = netlist.findIndex((net) => net.includes(terminalId));
+  if (netIndex < 0) return null;
+  return {
+    netIndex,
+    label: stage.netLabels?.[netIndex] ?? `Net ${netIndex + 1}`,
+  };
+}
+
 export function getAllLearnSteps(experiment: ExperimentDef): LearnStep[] {
   return experiment.stages.flatMap((stage) =>
     stage.learnSteps.map((step) => ({

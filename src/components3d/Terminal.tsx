@@ -1,6 +1,6 @@
 import { Html } from '@react-three/drei';
 import { useState } from 'react';
-import { getStage } from '../core/circuit/stages';
+import { findStageTerminalNetInfo, getStage } from '../core/circuit/stages';
 import { getExperiment } from '../core/experiments/registry';
 import type { TerminalDef, TerminalId } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
@@ -34,6 +34,9 @@ export function Terminal({
   const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
   const mode = useSessionStore((s) => s.mode);
   const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
+  const highlightedNetPinned = useSessionStore((s) => s.highlightedNetPinned);
+  const setHighlightedNetIndex = useSessionStore((s) => s.setHighlightedNetIndex);
+  const clearHighlightedNet = useSessionStore((s) => s.clearHighlightedNet);
   const resolvedTheme = useThemeStore((s) => s.resolved);
   const supplyOn = useControlsStore((s) => s.supplyOn);
 
@@ -43,11 +46,15 @@ export function Terminal({
   const ringColor = UNIFORM_TERMINAL_COLOR;
   const highlightColor = resolvedTheme === 'dark' ? '#38bdf8' : '#0284c7';
 
+  const currentStage = getStage(getExperiment(experimentId), currentStageIndex);
+  const observeNetInfo = isObserveMode
+    ? findStageTerminalNetInfo(currentStage, fullId)
+    : null;
+
   let isNetHighlighted = false;
   let isNetDimmed = false;
   if (isObserveMode && highlightedNetIndex !== null) {
-    const stage = getStage(getExperiment(experimentId), currentStageIndex);
-    const net = stage.acceptedNetlists[0]?.[highlightedNetIndex];
+    const net = currentStage.acceptedNetlists[0]?.[highlightedNetIndex];
     if (net) {
       isNetHighlighted = net.includes(fullId);
       isNetDimmed = !isNetHighlighted;
@@ -66,8 +73,11 @@ export function Terminal({
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
-          setHovered(!isObserveMode);
+          setHovered(true);
           setHoveredTerminal(fullId);
+          if (isObserveMode && observeNetInfo && !highlightedNetPinned) {
+            setHighlightedNetIndex(observeNetInfo.netIndex, false);
+          }
           document.body.style.cursor =
             isLearnMode || isObserveMode ? 'default' : 'pointer';
         }}
@@ -75,6 +85,9 @@ export function Terminal({
           e.stopPropagation();
           setHovered(false);
           setHoveredTerminal(null);
+          if (isObserveMode && !highlightedNetPinned) {
+            clearHighlightedNet();
+          }
           document.body.style.cursor = 'auto';
         }}
       >
@@ -162,6 +175,16 @@ export function Terminal({
             </span>
             <span className="mx-1 opacity-50">·</span>
             <span>{terminal.label}</span>
+            {isObserveMode && (
+              <div
+                className="mt-0.5 text-[10px] font-medium"
+                style={{ color: 'var(--vml-text-muted)' }}
+              >
+                {observeNetInfo
+                  ? observeNetInfo.label
+                  : 'Open / unconnected in this stage'}
+              </div>
+            )}
           </div>
         </Html>
       )}

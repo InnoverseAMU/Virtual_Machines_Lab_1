@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { findVariacForTargetV1 } from '../core/circuit/learn';
 import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
-import { getStage } from '../core/circuit/stages';
+import { findStageTerminalNetInfo, getStage } from '../core/circuit/stages';
 import { validateWiring } from '../core/circuit/validate';
 import { ex3_1, NET_A, NET_B } from '../core/experiments/ex3_1';
 import { evaluateExperimentPhysics } from '../core/physics/evaluate';
@@ -153,5 +153,14 @@ describe('Observe mode (pre-wired bench)', () => {
     expect(session.runPractised['ex3.1']).toBe(true);
     expect(session.runCompleted['ex3.1']).not.toBe(true);
     expect(session.completedExperiments).not.toContain('ex3.1');
+  });
+
+  it('resolves terminal net labels for Observe mode hover tooltips (including neutral and supply)', () => {
+    const stage31 = getStage(ex3_1, 0);
+    expect(findStageTerminalNetInfo(stage31, 'sup.P')).toMatchObject({
+      netIndex: 0,
+    });
+    expect(findStageTerminalNetInfo(stage31, 'sup.N')?.label).toMatch(/neutral/i);
+    expect(findStageTerminalNetInfo(stage31, 'vp.A')).toBeTruthy();
   });
 });
