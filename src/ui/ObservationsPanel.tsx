@@ -17,6 +17,7 @@ import type {
 } from '../core/types';
 import { useSessionStore } from '../stores/sessionStore';
 import { ObservationChart } from './ObservationChart';
+import { TwoReadingCaptureBar } from './TwoReadingCaptureBar';
 
 interface ObservationsPanelProps {
   experiment: ExperimentDef;
@@ -72,8 +73,21 @@ export function ObservationsPanel({
   const hasMultipleStages = experiment.stages.length > 1;
   const stage = getStage(experiment, currentStageIndex);
   const supplyOn = isSupplySwitchOn(controls);
+  const pendingDualReading = useSessionStore((s) => s.pendingDualReading);
+  const dualSpec = stage.twoReadingCapture;
+  const dualSig = dualSpec
+    ? dualSpec.invalidationControlIds.map((id) => String(controls[id] ?? '')).join('|')
+    : '';
+  const dualReady =
+    !dualSpec ||
+    Boolean(
+      pendingDualReading &&
+        pendingDualReading.signature === dualSig &&
+        pendingDualReading.first &&
+        pendingDualReading.second,
+    );
   const canAddRow =
-    supplyOn && energised && observationRows.length < MAX_OBSERVATION_ROWS;
+    supplyOn && energised && dualReady && observationRows.length < MAX_OBSERVATION_ROWS;
 
   const visibleColumns = stage.observationTable.filter((c) => !c.hidden);
   const prereqs = evaluateStagePrerequisites(stage, observationRows);
@@ -173,6 +187,14 @@ export function ObservationsPanel({
               );
             })}
           </div>
+
+          <TwoReadingCaptureBar
+            stage={stage}
+            output={output}
+            values={controls}
+            supplyOn={supplyOn}
+            energised={energised}
+          />
 
           {/* Add row & Clear actions */}
           <div className="flex items-center justify-between gap-2">

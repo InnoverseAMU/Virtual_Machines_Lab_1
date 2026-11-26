@@ -11,9 +11,12 @@ import { useSessionStore } from '../stores/sessionStore';
 import { AcSupply } from './AcSupply';
 import { AcSupply3ph } from './AcSupply3ph';
 import { AnalogMeter } from './AnalogMeter';
+import { CurrentTransformer } from './CurrentTransformer';
+import { InductionMotor3ph } from './InductionMotor3ph';
 import { LampBank } from './LampBank';
 import { ProbeVoltmeter } from './ProbeVoltmeter';
 import { Rheostat } from './Rheostat';
+import { SelectorSwitch } from './SelectorSwitch';
 import { Transformer } from './Transformer';
 import { Transformer3ph } from './Transformer3ph';
 import { Variac } from './Variac';
@@ -205,6 +208,44 @@ export function ComponentRenderer({
           controlsLocked={controlsLocked}
         />
       );
+    case 'inductionMotor3ph': {
+      const loadDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const loadF = loadDef ? Number(values[loadDef.id] ?? 0) : 0;
+      const rpm = labOutput?.outputs?.n ?? 0;
+      const t1 = labOutput?.outputs?.T1 ?? 1.0 + 1.556 * loadF;
+      const t2 = labOutput?.outputs?.T2 ?? 1.0 + 0.556 * loadF;
+      return (
+        <InductionMotor3ph
+          instance={instance}
+          rpm={rpm}
+          t1Kgf={t1}
+          t2Kgf={t2}
+          loadF={loadF}
+        />
+      );
+    }
+    case 'currentTransformer':
+      return <CurrentTransformer instance={instance} />;
+    case 'selectorSwitch': {
+      const selDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'selector',
+      );
+      const ctrlId = selDef?.id ?? `${instance.id}.pos`;
+      const posVal = String(values[ctrlId] ?? 'B');
+      const opts =
+        selDef?.kind === 'selector' ? selDef.options.map(String) : ['B', 'C'];
+      return (
+        <SelectorSwitch
+          instance={instance}
+          controlId={ctrlId}
+          positionVal={posVal}
+          options={opts}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
     case 'voltmeter':
     case 'ammeter': {
       const rangeDef = controlsDef.find(

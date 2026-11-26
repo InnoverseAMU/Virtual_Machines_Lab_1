@@ -16,6 +16,7 @@ import type {
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { ObservationsPanel } from './ObservationsPanel';
+import { TwoReadingCaptureBar } from './TwoReadingCaptureBar';
 
 type SidebarTab = 'bench' | 'observations';
 
@@ -601,6 +602,7 @@ export function RightSidebar({
   const removeIdentifiedPair = useSessionStore((s) => s.removeIdentifiedPair);
   const identifiedPhases = useSessionStore((s) => s.identifiedPhases);
   const setIdentifiedPhases = useSessionStore((s) => s.setIdentifiedPhases);
+  const pendingDualReading = useSessionStore((s) => s.pendingDualReading);
   const [phaseAssign, setPhaseAssign] = useState<Record<string, 'a' | 'b' | 'c'>>({});
   const variacCtrl = controls.find((c) => c.kind === 'knob');
   const variacV = variacCtrl ? Number(values[variacCtrl.id] ?? 0) : 0;
@@ -609,10 +611,23 @@ export function RightSidebar({
   const isObserveMode = mode === 'observe';
   const hasObservations = mode === 'self' || isObserveMode || mode === 'learn';
   const currentTab: SidebarTab = hasObservations ? activeTab : 'bench';
+  const dualSpec = stage.twoReadingCapture;
+  const dualSig = dualSpec
+    ? dualSpec.invalidationControlIds.map((id) => String(values[id] ?? '')).join('|')
+    : '';
+  const dualReady =
+    !dualSpec ||
+    Boolean(
+      pendingDualReading &&
+        pendingDualReading.signature === dualSig &&
+        pendingDualReading.first &&
+        pendingDualReading.second,
+    );
   const canAddRow =
     hasObservations &&
     supplyOn &&
     energised &&
+    dualReady &&
     observationRows.length < MAX_OBSERVATION_ROWS;
 
   const dragStartY = useRef<number | null>(null);
@@ -1067,30 +1082,39 @@ export function RightSidebar({
   const stickyAddRowBar =
     hasObservations && currentTab === 'bench' ? (
       <div
-        className="flex shrink-0 items-center justify-between gap-2 px-3.5 py-2.5"
+        className="flex shrink-0 flex-col gap-2 px-3.5 py-2.5"
         style={{
           borderTop: '1px solid var(--vml-border)',
           backgroundColor: 'var(--vml-panel)',
         }}
       >
-        <button
-          type="button"
-          disabled={!canAddRow}
-          onClick={handleAddRow}
-          className="flex-1 rounded-lg px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-45"
-          style={{
-            backgroundColor: 'var(--vml-accent)',
-            color: 'var(--vml-accent-text)',
-          }}
-        >
-          + Add row
-        </button>
-        <span
-          className="font-mono text-xs font-semibold tabular-nums"
-          style={{ color: 'var(--vml-text-muted)' }}
-        >
-          {observationRows.length}/{MAX_OBSERVATION_ROWS}
-        </span>
+        <TwoReadingCaptureBar
+          stage={stage}
+          output={output}
+          values={values}
+          supplyOn={supplyOn}
+          energised={energised}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            disabled={!canAddRow}
+            onClick={handleAddRow}
+            className="flex-1 rounded-lg px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-45"
+            style={{
+              backgroundColor: 'var(--vml-accent)',
+              color: 'var(--vml-accent-text)',
+            }}
+          >
+            + Add row
+          </button>
+          <span
+            className="font-mono text-xs font-semibold tabular-nums"
+            style={{ color: 'var(--vml-text-muted)' }}
+          >
+            {observationRows.length}/{MAX_OBSERVATION_ROWS}
+          </span>
+        </div>
       </div>
     ) : null;
 

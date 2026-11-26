@@ -21,6 +21,9 @@ export type ComponentType =
   | 'transformer3phTrue'
   | 'transformerCenterTap'
   | 'transformerTeaser'
+  | 'inductionMotor3ph'
+  | 'currentTransformer'
+  | 'selectorSwitch'
   | 'voltmeter'
   | 'probeVoltmeter'
   | 'ammeter'
@@ -325,6 +328,17 @@ export type NetCategoryKey =
 
 export type StageCarryOver = 'none' | 'consistent-wires';
 
+export interface TwoReadingCaptureSpec {
+  selectorControlId: string;
+  firstOption: string;
+  secondOption: string;
+  firstLabel: string;
+  secondLabel: string;
+  invalidationControlIds: string[];
+  meterId: string;
+  reverseControlId?: string;
+}
+
 export interface StageDef {
   id: string;
   title: string;
@@ -352,6 +366,7 @@ export interface StageDef {
   carryOver?: StageCarryOver;
   probeEnabled?: boolean;
   identificationMode?: 'winding-pairs' | 'phase-groups';
+  twoReadingCapture?: TwoReadingCaptureSpec;
 }
 
 export interface ExperimentDef {

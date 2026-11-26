@@ -23,14 +23,20 @@ export function enterLabMode(experimentId: string, targetMode: LabMode): void {
   const stage = getStage(experiment, 0);
   const stageComponents = getStageComponents(experiment, stage);
   const meterIds = stageComponents
-    .filter(
-      (c) =>
+    .flatMap((c) => {
+      if (
         c.type === 'voltmeter' ||
         c.type === 'probeVoltmeter' ||
         c.type === 'ammeter' ||
-        c.type === 'wattmeter',
-    )
-    .map((c) => c.id);
+        c.type === 'wattmeter'
+      ) {
+        return [c.id];
+      }
+      if (c.type === 'inductionMotor3ph') {
+        return ['s1', 's2', 'tacho'];
+      }
+      return [];
+    });
 
   const seed =
     targetMode === 'observe' ? OBSERVE_FIXED_SEED : createSessionSeed();

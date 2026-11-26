@@ -6,7 +6,7 @@ import {
   getCanonicalStageNetsForSeed,
   getScrambledTerminalMap,
 } from '../../core/phasor/ex3_5Scramble';
-import { evaluateExperimentPhysics } from '../../core/physics/evaluate';
+import { findMeterReading, evaluateExperimentPhysics } from '../../core/physics/evaluate';
 import { drawSessionMeterGains } from '../../core/physics/meters';
 import {
   captureObservationRow,
@@ -651,6 +651,80 @@ const DEFAULT_PROCEDURES: Record<
       };
     },
   },
+  'ex4.1': {
+    runStage: ({ experiment, stageIndex, seed, gains }) => {
+      const stage = getStage(experiment, stageIndex);
+      const wires = wiresFromNetlist(stage.acceptedNetlists[0], []);
+      // Manual procedure (iii)-(iv): start at rated current (~9.95 kgf -> ~5.93 A) down to belt-released no load (0 kgf)
+      const loadForces = [9.95, 8.0, 6.0, 4.0, 2.0, 0.0];
+
+      return loadForces.map((loadF, idx) => {
+        const readSel = (pos: 'B' | 'C', reverseOn: boolean) =>
+          evaluateExperimentPhysics(
+            experiment,
+            wires,
+            {
+              'sup3.switch': true,
+              'va3.knob': 230,
+              'wm.vRange': 300,
+              'wm.iRange': 5,
+              'wm.reverse': reverseOn,
+              'sel.pos': pos,
+              'motor.loadF': loadF,
+            },
+            gains,
+            { stageIndex, seed },
+          );
+
+        let w1Rev = false;
+        let outB = readSel('B', false);
+        let wmB = findMeterReading(outB.output, 'wm');
+        if (wmB?.reversed) {
+          w1Rev = true;
+          outB = readSel('B', true);
+          wmB = findMeterReading(outB.output, 'wm');
+        }
+
+        const outC = readSel('C', false);
+        const wmC = findMeterReading(outC.output, 'wm');
+
+        const controls: ControlValues = {
+          'sup3.switch': true,
+          'va3.knob': 230,
+          'wm.vRange': 300,
+          'wm.iRange': 5,
+          'wm.reverse': false,
+          'sel.pos': 'C',
+          'motor.loadF': loadF,
+          'pending.w1Div': wmB?.dial ?? 0,
+          'pending.w1Rev': w1Rev,
+          'pending.w2Div': wmC?.dial ?? 0,
+          'pending.w2Rev': false,
+          'pending.wmMf': wmC?.mf ?? 10,
+        };
+        return captureObservationRow(stage, outC.output, controls, idx + 1, `im41_${idx + 1}`);
+      });
+    },
+    computeAnswers: (rowsByStage) => {
+      const rows = rowsByStage['im-load-test'] ?? [];
+      let ratedRow = rows[0];
+      let bestDiff = Math.abs(getRowNumber(ratedRow, 'I') - 5.93);
+      for (const r of rows) {
+        const d = Math.abs(getRowNumber(r, 'I') - 5.93);
+        if (d < bestDiff) {
+          ratedRow = r;
+          bestDiff = d;
+        }
+      }
+      return {
+        fullLoadSlip: getRowNumber(ratedRow, 'slip'),
+        fullLoadTorque: getRowNumber(ratedRow, 'torque'),
+        fullLoadEff: getRowNumber(ratedRow, 'eta'),
+        fullLoadPf: getRowNumber(ratedRow, 'pf'),
+        pfRiseReason: 'active-grows',
+      };
+    },
+  },
 };
 
 /**
@@ -670,15 +744,20 @@ export function referenceRun(
 ): ReferenceRunResult {
   const allMeterIds = Array.from(
     new Set(
-      experiment.components
-        .filter(
-          (c) =>
-            c.type === 'voltmeter' ||
-            c.type === 'probeVoltmeter' ||
-            c.type === 'ammeter' ||
-            c.type === 'wattmeter',
-        )
-        .map((c) => c.id),
+      experiment.components.flatMap((c) => {
+        if (
+          c.type === 'voltmeter' ||
+          c.type === 'probeVoltmeter' ||
+          c.type === 'ammeter' ||
+          c.type === 'wattmeter'
+        ) {
+          return [c.id];
+        }
+        if (c.type === 'inductionMotor3ph') {
+          return ['s1', 's2', 'tacho'];
+        }
+        return [];
+      }),
     ),
   );
   const resolvedGains = gains ?? drawSessionMeterGains(seed, allMeterIds);

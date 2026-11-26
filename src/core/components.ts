@@ -153,6 +153,35 @@ export const COMPONENT_DEFS: Record<ComponentType, ComponentTypeDef> = {
     type: 'probeVoltmeter',
     terminals: [],
   },
+  inductionMotor3ph: {
+    type: 'inductionMotor3ph',
+    terminals: [
+      { name: 'A', label: 'Stator A', localPos: [-0.36, 0.48, 0.42] },
+      { name: 'B', label: 'Stator B', localPos: [0, 0.48, 0.42] },
+      { name: 'C', label: 'Stator C', localPos: [0.36, 0.48, 0.42] },
+    ],
+  },
+  currentTransformer: {
+    type: 'currentTransformer',
+    terminals: [
+      { name: 'P_M', label: 'Primary Mains (M)', localPos: [-0.28, 0.24, 0.44] },
+      { name: 'P_L', label: 'Primary Load (L)', localPos: [0.28, 0.24, 0.44] },
+      { name: 'S_M', label: 'Secondary Mains (M)', localPos: [-0.28, -0.02, 0.44] },
+      { name: 'S_L', label: 'Secondary Load (L)', localPos: [0.28, -0.02, 0.44] },
+    ],
+  },
+  selectorSwitch: {
+    type: 'selectorSwitch',
+    terminals: [
+      { name: 'B', label: 'Phase B Input', localPos: [-0.26, 0.2, 0.42] },
+      { name: 'COM', label: 'Common Out (V2)', localPos: [0, 0.2, 0.42] },
+      { name: 'C', label: 'Phase C Input', localPos: [0.26, 0.2, 0.42] },
+    ],
+    internalLinks: (controls, instance) => {
+      const pos = String(controls[`${instance.id}.pos`] ?? 'B');
+      return pos === 'C' ? [['COM', 'C']] : [['COM', 'B']];
+    },
+  },
 };
 
 export function getComponentDef(type: ComponentType): ComponentTypeDef {
