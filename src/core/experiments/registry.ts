@@ -2,6 +2,7 @@ import { wiresFromNetlist } from '../circuit/nets';
 import { ex3_1 } from './ex3_1';
 import { ex3_2 } from './ex3_2';
 import { ex3_3 } from './ex3_3';
+import { ex3_4 } from './ex3_4';
 import { ExperimentDefSchema } from './schema';
 import type {
   ExperimentDef,
@@ -11,7 +12,7 @@ import type {
   WireEndpointPair,
 } from '../types';
 
-const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1, ex3_2, ex3_3];
+const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1, ex3_2, ex3_3, ex3_4];
 
 export const EXPERIMENTS: Record<string, ExperimentDef> = Object.fromEntries(
   RAW_EXPERIMENTS.map((exp) => {
@@ -47,7 +48,7 @@ export const EXPERIMENT_SUMMARIES: ExperimentSummary[] = [
     number: '3.4',
     title: 'Parallel operation of single-phase transformers',
     group: 'transformers',
-    available: false,
+    available: true,
   },
   {
     id: 'ex3.5',
