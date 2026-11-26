@@ -3,8 +3,6 @@ import type { ControlDef, TransformerLoadOutput } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
 
-type SidebarTab = 'readings' | 'controls';
-
 interface RightSidebarProps {
   controls: ControlDef[];
   output: TransformerLoadOutput;
@@ -52,263 +50,7 @@ function StatusBadge({
   return null;
 }
 
-interface ReadingsViewProps {
-  vpText: string;
-  vpOverrange: boolean;
-  vpDamaged: boolean;
-  vsText: string;
-  vsOverrange: boolean;
-  vsDamaged: boolean;
-  amText: string;
-  amOverrange: boolean;
-  amDamaged: boolean;
-  wmDialText: string;
-  wmMfText: string;
-  wmPowerText: string;
-  wmOverrange: boolean;
-  wmDamaged: boolean;
-  wmReversed: boolean;
-  wmVRange: number;
-  wmIRange: number;
-  vpRange: number;
-  vsRange: number;
-  amRange: number;
-  supplyOn: boolean;
-  mcbTripped: boolean;
-  variacV: number;
-  showNumericReadouts: boolean;
-  onToggleNumericReadouts: () => void;
-}
-
-const ReadingsTab = memo(function ReadingsTab({
-  vpText,
-  vpOverrange,
-  vpDamaged,
-  vsText,
-  vsOverrange,
-  vsDamaged,
-  amText,
-  amOverrange,
-  amDamaged,
-  wmDialText,
-  wmMfText,
-  wmPowerText,
-  wmOverrange,
-  wmDamaged,
-  wmReversed,
-  wmVRange,
-  wmIRange,
-  vpRange,
-  vsRange,
-  amRange,
-  supplyOn,
-  mcbTripped,
-  variacV,
-  showNumericReadouts,
-  onToggleNumericReadouts,
-}: ReadingsViewProps) {
-  return (
-    <div className="space-y-3 text-xs">
-      {/* Numeric readouts practice switch */}
-      <div
-        className="flex items-center justify-between rounded-xl px-3 py-2"
-        style={{
-          backgroundColor: 'var(--vml-panel-hover)',
-          border: '1px solid var(--vml-border)',
-        }}
-      >
-        <div>
-          <div className="font-semibold">Numeric readouts</div>
-          <div
-            className="text-[11px]"
-            style={{ color: 'var(--vml-text-muted)' }}
-          >
-            Hide to practise reading pointers
-          </div>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={showNumericReadouts}
-          onClick={onToggleNumericReadouts}
-          className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
-          style={{
-            backgroundColor: showNumericReadouts
-              ? 'var(--vml-accent)'
-              : '#64748b',
-          }}
-        >
-          <span
-            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-              showNumericReadouts ? 'translate-x-4.5' : 'translate-x-1'
-            }`}
-          />
-        </button>
-      </div>
-
-      {/* Supply & Variac status */}
-      <div
-        className="space-y-2 rounded-xl p-3"
-        style={{ border: '1px solid var(--vml-border)' }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">230 V AC supply</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              sup · MCB
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusBadge tripped={mcbTripped} />
-            <span
-              className={`rounded px-2 py-0.5 text-[11px] font-bold ${
-                supplyOn
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-600 text-slate-100'
-              }`}
-            >
-              {supplyOn ? 'ON' : 'OFF'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">Autotransformer</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              va · 0–270 V knob
-            </div>
-          </div>
-          <span className="font-mono text-sm font-bold tabular-nums">
-            {variacV} V
-          </span>
-        </div>
-      </div>
-
-      {/* Analog Meters */}
-      <div
-        className="space-y-2.5 rounded-xl p-3"
-        style={{ border: '1px solid var(--vml-border)' }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">V primary</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              vp · 0–{vpRange} V
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusBadge damaged={vpDamaged} overrange={vpOverrange} />
-            <span className="font-mono text-sm font-bold tabular-nums">
-              {showNumericReadouts ? `${vpText} V` : '— V'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">V secondary</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              vs · 0–{vsRange} V
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusBadge damaged={vsDamaged} overrange={vsOverrange} />
-            <span className="font-mono text-sm font-bold tabular-nums">
-              {showNumericReadouts ? `${vsText} V` : '— V'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">A secondary</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              am · 0–{amRange} A
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusBadge damaged={amDamaged} overrange={amOverrange} />
-            <span className="font-mono text-sm font-bold tabular-nums">
-              {showNumericReadouts ? `${amText} A` : '— A'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Wattmeter */}
-      <div
-        className="space-y-2 rounded-xl p-3"
-        style={{ border: '1px solid var(--vml-border)' }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">Wattmeter</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              wm · {wmVRange} V / {wmIRange} A · 150 div
-            </div>
-          </div>
-          <StatusBadge
-            damaged={wmDamaged}
-            reversed={wmReversed}
-            overrange={wmOverrange}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--vml-text-muted)' }}>Dial reading</span>
-          <span className="font-mono font-bold tabular-nums">
-            {showNumericReadouts ? `${wmDialText} div` : '— div'}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--vml-text-muted)' }}>
-            Multiplying factor (MF)
-          </span>
-          <span className="font-mono font-semibold tabular-nums">
-            {wmMfText} W/div
-          </span>
-        </div>
-
-        <div
-          className="flex items-center justify-between pt-1.5"
-          style={{ borderTop: '1px solid var(--vml-border)' }}
-        >
-          <span style={{ color: 'var(--vml-text-muted)' }}>
-            Power (dial × MF)
-          </span>
-          <span
-            className="font-mono text-sm font-bold tabular-nums"
-            style={{ color: 'var(--vml-accent)' }}
-          >
-            {showNumericReadouts ? `${wmPowerText} W` : '— W'}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const ControlsTab = memo(function ControlsTab({
+const ControlsSection = memo(function ControlsSection({
   controls,
 }: {
   controls: ControlDef[];
@@ -330,7 +72,14 @@ const ControlsTab = memo(function ControlsTab({
   const setLamps = useControlsStore((s) => s.setLamps);
 
   return (
-    <div className="space-y-4">
+    <section aria-label="Bench controls" className="space-y-3">
+      <h2
+        className="text-[11px] font-bold tracking-wider uppercase"
+        style={{ color: 'var(--vml-text-muted)' }}
+      >
+        Controls
+      </h2>
+
       {controls.map((ctrl) => {
         if (ctrl.kind === 'switch') {
           return (
@@ -343,7 +92,7 @@ const ControlsTab = memo(function ControlsTab({
                 type="button"
                 onClick={toggleSupply}
                 aria-pressed={supplyOn}
-                className={`w-full rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                className={`w-full rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                   supplyOn
                     ? 'bg-emerald-600 text-white hover:bg-emerald-500'
                     : mcbTripped
@@ -449,7 +198,7 @@ const ControlsTab = memo(function ControlsTab({
                           setWmIRange(opt);
                         }
                       }}
-                      className="rounded-md px-2 py-1.5 text-xs font-semibold transition"
+                      className="rounded-md px-2 py-1 text-xs font-semibold transition"
                       style={{
                         backgroundColor: active
                           ? 'var(--vml-accent)'
@@ -489,14 +238,14 @@ const ControlsTab = memo(function ControlsTab({
                   All Off
                 </button>
               </div>
-              <div className="grid grid-cols-6 gap-1.5">
+              <div className="grid grid-cols-6 gap-1">
                 {activeLampSlice.map((isOn, idx) => (
                   <button
                     key={idx}
                     type="button"
                     aria-pressed={isOn}
                     onClick={() => toggleLampIndex(idx)}
-                    className="rounded-md py-1.5 text-xs font-semibold transition"
+                    className="rounded-md py-1 text-[11px] font-semibold transition"
                     style={{
                       backgroundColor: isOn
                         ? '#f59e0b'
@@ -515,12 +264,246 @@ const ControlsTab = memo(function ControlsTab({
 
         return null;
       })}
-    </div>
+    </section>
+  );
+});
+
+interface ReadingsSectionProps {
+  vpText: string;
+  vpOverrange: boolean;
+  vpDamaged: boolean;
+  vsText: string;
+  vsOverrange: boolean;
+  vsDamaged: boolean;
+  amText: string;
+  amOverrange: boolean;
+  amDamaged: boolean;
+  wmDialText: string;
+  wmMfText: string;
+  wmPowerText: string;
+  wmOverrange: boolean;
+  wmDamaged: boolean;
+  wmReversed: boolean;
+  wmVRange: number;
+  wmIRange: number;
+  vpRange: number;
+  vsRange: number;
+  amRange: number;
+  supplyOn: boolean;
+  mcbTripped: boolean;
+  variacV: number;
+  showNumericReadouts: boolean;
+  onToggleNumericReadouts: () => void;
+}
+
+const ReadingsSection = memo(function ReadingsSection({
+  vpText,
+  vpOverrange,
+  vpDamaged,
+  vsText,
+  vsOverrange,
+  vsDamaged,
+  amText,
+  amOverrange,
+  amDamaged,
+  wmDialText,
+  wmMfText,
+  wmPowerText,
+  wmOverrange,
+  wmDamaged,
+  wmReversed,
+  wmVRange,
+  wmIRange,
+  vpRange,
+  vsRange,
+  amRange,
+  supplyOn,
+  mcbTripped,
+  variacV,
+  showNumericReadouts,
+  onToggleNumericReadouts,
+}: ReadingsSectionProps) {
+  return (
+    <section aria-label="Meter readings" className="space-y-2.5 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <h2
+          className="text-[11px] font-bold tracking-wider uppercase"
+          style={{ color: 'var(--vml-text-muted)' }}
+        >
+          Readings
+        </h2>
+        <div className="flex items-center gap-1.5">
+          <StatusBadge tripped={mcbTripped} />
+          <span
+            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+              supplyOn
+                ? 'bg-emerald-600 text-white'
+                : 'bg-slate-600 text-slate-100'
+            }`}
+          >
+            {supplyOn ? 'ON' : 'OFF'}
+          </span>
+          <span className="font-mono text-[11px] font-semibold tabular-nums">
+            {variacV} V
+          </span>
+        </div>
+      </div>
+
+      {/* Numeric readouts practice switch */}
+      <div
+        className="flex items-center justify-between rounded-xl px-2.5 py-1.5"
+        style={{
+          backgroundColor: 'var(--vml-panel-hover)',
+          border: '1px solid var(--vml-border)',
+        }}
+      >
+        <div>
+          <div className="font-semibold">Numeric readouts</div>
+          <div
+            className="text-[10px]"
+            style={{ color: 'var(--vml-text-muted)' }}
+          >
+            Hide to practise reading pointers
+          </div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={showNumericReadouts}
+          onClick={onToggleNumericReadouts}
+          className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors"
+          style={{
+            backgroundColor: showNumericReadouts
+              ? 'var(--vml-accent)'
+              : '#64748b',
+          }}
+        >
+          <span
+            className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+              showNumericReadouts ? 'translate-x-4.5' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Analog Meters */}
+      <div
+        className="space-y-2 rounded-xl p-2.5"
+        style={{ border: '1px solid var(--vml-border)' }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="font-semibold">V primary</div>
+            <div
+              className="text-[10px]"
+              style={{ color: 'var(--vml-text-muted)' }}
+            >
+              vp · 0–{vpRange} V
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <StatusBadge damaged={vpDamaged} overrange={vpOverrange} />
+            <span className="font-mono text-sm font-bold tabular-nums">
+              {showNumericReadouts ? `${vpText} V` : '— V'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="font-semibold">V secondary</div>
+            <div
+              className="text-[10px]"
+              style={{ color: 'var(--vml-text-muted)' }}
+            >
+              vs · 0–{vsRange} V
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <StatusBadge damaged={vsDamaged} overrange={vsOverrange} />
+            <span className="font-mono text-sm font-bold tabular-nums">
+              {showNumericReadouts ? `${vsText} V` : '— V'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="font-semibold">A secondary</div>
+            <div
+              className="text-[10px]"
+              style={{ color: 'var(--vml-text-muted)' }}
+            >
+              am · 0–{amRange} A
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <StatusBadge damaged={amDamaged} overrange={amOverrange} />
+            <span className="font-mono text-sm font-bold tabular-nums">
+              {showNumericReadouts ? `${amText} A` : '— A'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Wattmeter */}
+      <div
+        className="space-y-1.5 rounded-xl p-2.5"
+        style={{ border: '1px solid var(--vml-border)' }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <div className="font-semibold">Wattmeter</div>
+            <div
+              className="text-[10px]"
+              style={{ color: 'var(--vml-text-muted)' }}
+            >
+              wm · {wmVRange} V / {wmIRange} A · 150 div
+            </div>
+          </div>
+          <StatusBadge
+            damaged={wmDamaged}
+            reversed={wmReversed}
+            overrange={wmOverrange}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span style={{ color: 'var(--vml-text-muted)' }}>Dial reading</span>
+          <span className="font-mono font-bold tabular-nums">
+            {showNumericReadouts ? `${wmDialText} div` : '— div'}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span style={{ color: 'var(--vml-text-muted)' }}>
+            Multiplying factor (MF)
+          </span>
+          <span className="font-mono font-semibold tabular-nums">
+            {wmMfText} W/div
+          </span>
+        </div>
+
+        <div
+          className="flex items-center justify-between pt-1.5"
+          style={{ borderTop: '1px solid var(--vml-border)' }}
+        >
+          <span style={{ color: 'var(--vml-text-muted)' }}>
+            Power (dial × MF)
+          </span>
+          <span
+            className="font-mono text-sm font-bold tabular-nums"
+            style={{ color: 'var(--vml-accent)' }}
+          >
+            {showNumericReadouts ? `${wmPowerText} W` : '— W'}
+          </span>
+        </div>
+      </div>
+    </section>
   );
 });
 
 export function RightSidebar({ controls, output }: RightSidebarProps) {
-  const [activeTab, setActiveTab] = useState<SidebarTab>('readings');
   const [mobileExpanded, setMobileExpanded] = useState(false);
 
   const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
@@ -545,67 +528,40 @@ export function RightSidebar({ controls, output }: RightSidebarProps) {
 
   const dragStartY = useRef<number | null>(null);
 
-  const tabBar = (
-    <div
-      className="grid grid-cols-2 gap-1 p-1.5"
-      style={{ borderBottom: '1px solid var(--vml-border)' }}
-      role="tablist"
-      aria-label="Sidebar sections"
-    >
-      {(['readings', 'controls'] as const).map((tab) => {
-        const active = activeTab === tab;
-        return (
-          <button
-            key={tab}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            onClick={() => setActiveTab(tab)}
-            className="rounded-lg py-1.5 text-xs font-semibold capitalize transition"
-            style={{
-              backgroundColor: active ? 'var(--vml-accent)' : 'transparent',
-              color: active ? 'var(--vml-accent-text)' : 'var(--vml-text)',
-            }}
-          >
-            {tab}
-          </button>
-        );
-      })}
+  const stackedContent = (
+    <div className="space-y-4">
+      <ControlsSection controls={controls} />
+      <div style={{ borderTop: '1px solid var(--vml-border)' }} className="pt-3.5">
+        <ReadingsSection
+          vpText={vpText}
+          vpOverrange={vp.overrange}
+          vpDamaged={vp.damaged}
+          vsText={vsText}
+          vsOverrange={vs.overrange}
+          vsDamaged={vs.damaged}
+          amText={amText}
+          amOverrange={am.overrange}
+          amDamaged={am.damaged}
+          wmDialText={wmDialText}
+          wmMfText={wmMfText}
+          wmPowerText={wmPowerText}
+          wmOverrange={wm.overrange}
+          wmDamaged={wm.damaged}
+          wmReversed={wm.reversed}
+          wmVRange={wmVRange}
+          wmIRange={wmIRange}
+          vpRange={vp.range}
+          vsRange={vs.range}
+          amRange={am.range}
+          supplyOn={supplyOn}
+          mcbTripped={mcbTripped}
+          variacV={variacV}
+          showNumericReadouts={showNumericReadouts}
+          onToggleNumericReadouts={toggleNumericReadouts}
+        />
+      </div>
     </div>
   );
-
-  const tabContent =
-    activeTab === 'readings' ? (
-      <ReadingsTab
-        vpText={vpText}
-        vpOverrange={vp.overrange}
-        vpDamaged={vp.damaged}
-        vsText={vsText}
-        vsOverrange={vs.overrange}
-        vsDamaged={vs.damaged}
-        amText={amText}
-        amOverrange={am.overrange}
-        amDamaged={am.damaged}
-        wmDialText={wmDialText}
-        wmMfText={wmMfText}
-        wmPowerText={wmPowerText}
-        wmOverrange={wm.overrange}
-        wmDamaged={wm.damaged}
-        wmReversed={wm.reversed}
-        wmVRange={wmVRange}
-        wmIRange={wmIRange}
-        vpRange={vp.range}
-        vsRange={vs.range}
-        amRange={am.range}
-        supplyOn={supplyOn}
-        mcbTripped={mcbTripped}
-        variacV={variacV}
-        showNumericReadouts={showNumericReadouts}
-        onToggleNumericReadouts={toggleNumericReadouts}
-      />
-    ) : (
-      <ControlsTab controls={controls} />
-    );
 
   return (
     <>
@@ -629,7 +585,7 @@ export function RightSidebar({ controls, output }: RightSidebarProps) {
         </button>
 
         <aside
-          aria-label="Readings and bench controls"
+          aria-label="Bench controls and readings"
           className="h-full overflow-hidden transition-[width] duration-200 ease-out"
           style={{
             width: sidebarOpen ? 320 : 0,
@@ -639,15 +595,14 @@ export function RightSidebar({ controls, output }: RightSidebarProps) {
           }}
         >
           <div className="flex h-full w-[320px] flex-col">
-            {tabBar}
-            <div className="flex-1 overflow-y-auto p-3.5">{tabContent}</div>
+            <div className="flex-1 overflow-y-auto p-3.5">{stackedContent}</div>
           </div>
         </aside>
       </div>
 
       {/* Phone bottom sheet with drag handle + peek bar */}
       <aside
-        aria-label="Readings and bench controls"
+        aria-label="Bench controls and readings"
         className="pointer-events-auto fixed inset-x-0 bottom-0 z-20 flex flex-col rounded-t-2xl shadow-2xl backdrop-blur transition-transform duration-200 ease-out md:hidden"
         style={{
           backgroundColor: 'var(--vml-panel)',
@@ -677,18 +632,14 @@ export function RightSidebar({ controls, output }: RightSidebarProps) {
           }}
         >
           <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-400/60" />
-          <div className="flex items-center justify-between gap-2 text-[11px] font-mono tabular-nums">
+          <div className="flex items-center justify-between gap-2 font-mono text-[11px] tabular-nums">
             <span>
               V1:{' '}
-              <strong>
-                {showNumericReadouts ? `${vpText}V` : '—'}
-              </strong>
+              <strong>{showNumericReadouts ? `${vpText}V` : '—'}</strong>
             </span>
             <span>
               V2:{' '}
-              <strong>
-                {showNumericReadouts ? `${vsText}V` : '—'}
-              </strong>
+              <strong>{showNumericReadouts ? `${vsText}V` : '—'}</strong>
             </span>
             <span>
               WM:{' '}
@@ -716,11 +667,10 @@ export function RightSidebar({ controls, output }: RightSidebarProps) {
 
         <div
           className="overflow-hidden transition-[max-height] duration-200 ease-out"
-          style={{ maxHeight: mobileExpanded ? '58vh' : '0px' }}
+          style={{ maxHeight: mobileExpanded ? '60vh' : '0px' }}
         >
-          {tabBar}
-          <div className="max-h-[48vh] overflow-y-auto p-3.5">
-            {tabContent}
+          <div className="max-h-[56vh] overflow-y-auto p-3.5">
+            {stackedContent}
           </div>
         </div>
       </aside>
