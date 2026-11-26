@@ -83,6 +83,7 @@ interface MeterDialProps {
   maxScale: number;
   pointerRatio: number;
   readingText: string;
+  showNumericReadout?: boolean;
   width?: number;
   height?: number;
   position?: [number, number, number];
@@ -99,6 +100,7 @@ export function MeterDial({
   maxScale,
   pointerRatio,
   readingText,
+  showNumericReadout = true,
   width = 0.62,
   height = 0.42,
   position = [0, 0, 0],
@@ -115,6 +117,7 @@ export function MeterDial({
       : overrange
         ? 'OVERRANGE'
         : '';
+  const renderedText = showNumericReadout ? readingText : '';
 
   const faceTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
@@ -198,12 +201,14 @@ export function MeterDial({
         ctx.fillText(statusBadge, cx, cy - 84);
       }
 
-      // Numeric readout strip under dial
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(48, canvas.height - 58, canvas.width - 96, 44);
-      ctx.fillStyle = damaged ? '#f87171' : '#38bdf8';
-      ctx.font = '700 28px ui-monospace, monospace';
-      ctx.fillText(readingText, cx, canvas.height - 35);
+      // Numeric readout strip under dial (omitted when student disables numeric readouts)
+      if (showNumericReadout) {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(48, canvas.height - 58, canvas.width - 96, 44);
+        ctx.fillStyle = damaged ? '#f87171' : '#38bdf8';
+        ctx.font = '700 28px ui-monospace, monospace';
+        ctx.fillText(renderedText, cx, canvas.height - 35);
+      }
     }
 
     const tex = new THREE.CanvasTexture(canvas);
@@ -211,7 +216,18 @@ export function MeterDial({
     tex.anisotropy = 4;
     tex.needsUpdate = true;
     return tex;
-  }, [title, unit, maxScale, allowNegative, overrange, damaged, reversed, statusBadge, readingText]);
+  }, [
+    title,
+    unit,
+    maxScale,
+    allowNegative,
+    overrange,
+    damaged,
+    reversed,
+    statusBadge,
+    showNumericReadout,
+    renderedText,
+  ]);
 
   useEffect(() => {
     return () => {

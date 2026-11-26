@@ -8,8 +8,7 @@ import { useSessionStore } from './stores/sessionStore';
 import { useThemeStore } from './stores/themeStore';
 import { useWiringStore } from './stores/wiringStore';
 import type { ThemeMode } from './theme/tokens';
-import { ControlPanel } from './ui/ControlPanel';
-import { MeterReadouts } from './ui/MeterReadouts';
+import { RightSidebar } from './ui/RightSidebar';
 import { ToastBanner } from './ui/ToastBanner';
 
 const PRESET_BUTTONS: { id: CameraPreset; label: string }[] = [
@@ -74,6 +73,8 @@ export function App() {
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
   const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
+  const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
+  const toggleSidebar = useSessionStore((s) => s.toggleSidebar);
   const pushToast = useSessionStore((s) => s.pushToast);
   const dismissToast = useSessionStore((s) => s.dismissToast);
 
@@ -101,7 +102,6 @@ export function App() {
     initFromControls(experiment.controls);
   }, [experiment, initFromControls]);
 
-  // Memoised physics evaluation: runs only when wires or controls change, never per frame
   const evaluation = useMemo(
     () =>
       evaluateExperimentPhysics(
@@ -113,7 +113,6 @@ export function App() {
     [experiment, wires, supplyOn, variacV, wmVRange, wmIRange, lamps, gains],
   );
 
-  // MCB trip handling & edge-triggered runtime event toasts
   const prevEventIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const { mcbTripped, events } = evaluation.output;
@@ -138,7 +137,6 @@ export function App() {
     prevEventIdsRef.current = currentIds;
   }, [evaluation.output, tripMcb, pushToast, dismissToast]);
 
-  // Clear MCB trip toast when supply is cleanly re-energised
   useEffect(() => {
     if (supplyOn && !evaluation.output.mcbTripped) {
       dismissToast('mcb-trip');
@@ -164,106 +162,144 @@ export function App() {
         !e.altKey
       ) {
         toggleTerminalLabels();
+      } else if (
+        (e.key === 's' || e.key === 'S') &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey
+      ) {
+        toggleSidebar();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [clearSelectedTerminal, setFocusedControl, toggleTerminalLabels]);
+  }, [
+    clearSelectedTerminal,
+    setFocusedControl,
+    toggleTerminalLabels,
+    toggleSidebar,
+  ]);
 
   return (
-    <div className="fixed inset-0 overflow-hidden select-none">
-      <BenchScene
-        labOutput={evaluation.output}
-        connectionState={evaluation.connectionState}
-      />
+    <div className="fixed inset-0 flex overflow-hidden select-none">
+      {/* Main 3D canvas area resizes smoothly when sidebar opens/closes */}
+      <div className="relative h-full min-w-0 flex-1 overflow-hidden">
+        <BenchScene
+          labOutput={evaluation.output}
+          connectionState={evaluation.connectionState}
+        />
 
-      {/* Top bar: camera presets, theme toggle, terminal labels toggle, status */}
-      <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex flex-wrap items-center justify-center gap-2 px-3">
-        <div
-          className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full p-1 shadow-lg backdrop-blur"
-          style={{
-            backgroundColor: 'var(--vml-panel)',
-            border: '1px solid var(--vml-border)',
-            color: 'var(--vml-text)',
-          }}
-        >
-          {PRESET_BUTTONS.map((p) => {
-            const active = cameraPreset === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setCameraPreset(p.id)}
-                className="rounded-full px-3 py-1 text-xs font-medium transition"
-                style={{
-                  backgroundColor: active ? 'var(--vml-accent)' : 'transparent',
-                  color: active ? 'var(--vml-accent-text)' : 'var(--vml-text)',
-                }}
-              >
-                {p.label}
-              </button>
-            );
-          })}
+        {/* Top bar: camera presets, theme toggle, terminal labels, sidebar toggle */}
+        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex flex-wrap items-center justify-center gap-2 px-3">
+          <div
+            className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full p-1 shadow-lg backdrop-blur"
+            style={{
+              backgroundColor: 'var(--vml-panel)',
+              border: '1px solid var(--vml-border)',
+              color: 'var(--vml-text)',
+            }}
+          >
+            {PRESET_BUTTONS.map((p) => {
+              const active = cameraPreset === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => setCameraPreset(p.id)}
+                  className="rounded-full px-3 py-1 text-xs font-medium transition"
+                  style={{
+                    backgroundColor: active
+                      ? 'var(--vml-accent)'
+                      : 'transparent',
+                    color: active
+                      ? 'var(--vml-accent-text)'
+                      : 'var(--vml-text)',
+                  }}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={cycleThemeMode}
+            aria-label={`Color theme: ${MODE_LABELS[themeMode]} (${resolvedTheme}). Click to cycle system, light, dark.`}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+            style={{
+              backgroundColor: 'var(--vml-panel)',
+              border: '1px solid var(--vml-border)',
+              color: 'var(--vml-text)',
+            }}
+          >
+            <ThemeIcon mode={themeMode} resolved={resolvedTheme} />
+            <span>{MODE_LABELS[themeMode]}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleTerminalLabels}
+            aria-pressed={showTerminalLabels}
+            className="pointer-events-auto rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+            style={{
+              backgroundColor: showTerminalLabels
+                ? 'var(--vml-accent)'
+                : 'var(--vml-panel)',
+              border: '1px solid var(--vml-border)',
+              color: showTerminalLabels
+                ? 'var(--vml-accent-text)'
+                : 'var(--vml-text)',
+            }}
+          >
+            Labels (L): {showTerminalLabels ? 'On' : 'Off'}
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={sidebarOpen ? 'Hide sidebar (S)' : 'Show sidebar (S)'}
+            aria-expanded={sidebarOpen}
+            className="pointer-events-auto rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+            style={{
+              backgroundColor: sidebarOpen
+                ? 'var(--vml-accent)'
+                : 'var(--vml-panel)',
+              border: '1px solid var(--vml-border)',
+              color: sidebarOpen
+                ? 'var(--vml-accent-text)'
+                : 'var(--vml-text)',
+            }}
+          >
+            Panel (S)
+          </button>
+
+          <div
+            className="hidden rounded-full px-3 py-1.5 text-xs shadow-lg backdrop-blur lg:block"
+            style={{
+              backgroundColor: 'var(--vml-panel)',
+              border: '1px solid var(--vml-border)',
+              color: 'var(--vml-text-muted)',
+            }}
+          >
+            {selectedTerminal ? (
+              <span>
+                Selected:{' '}
+                <strong style={{ color: 'var(--vml-accent)' }}>
+                  {selectedTerminal}
+                </strong>{' '}
+                (click target terminal or Esc)
+              </span>
+            ) : (
+              <span>Wires: {wires.length}</span>
+            )}
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={cycleThemeMode}
-          aria-label={`Color theme: ${MODE_LABELS[themeMode]} (${resolvedTheme}). Click to cycle system, light, dark.`}
-          className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
-          style={{
-            backgroundColor: 'var(--vml-panel)',
-            border: '1px solid var(--vml-border)',
-            color: 'var(--vml-text)',
-          }}
-        >
-          <ThemeIcon mode={themeMode} resolved={resolvedTheme} />
-          <span>{MODE_LABELS[themeMode]}</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={toggleTerminalLabels}
-          aria-pressed={showTerminalLabels}
-          className="pointer-events-auto rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
-          style={{
-            backgroundColor: showTerminalLabels
-              ? 'var(--vml-accent)'
-              : 'var(--vml-panel)',
-            border: '1px solid var(--vml-border)',
-            color: showTerminalLabels
-              ? 'var(--vml-accent-text)'
-              : 'var(--vml-text)',
-          }}
-        >
-          Labels (L): {showTerminalLabels ? 'On' : 'Off'}
-        </button>
-
-        <div
-          className="hidden rounded-full px-3 py-1.5 text-xs shadow-lg backdrop-blur lg:block"
-          style={{
-            backgroundColor: 'var(--vml-panel)',
-            border: '1px solid var(--vml-border)',
-            color: 'var(--vml-text-muted)',
-          }}
-        >
-          {selectedTerminal ? (
-            <span>
-              Selected:{' '}
-              <strong style={{ color: 'var(--vml-accent)' }}>
-                {selectedTerminal}
-              </strong>{' '}
-              (click target terminal or Esc)
-            </span>
-          ) : (
-            <span>Wires: {wires.length}</span>
-          )}
-        </div>
+        <ToastBanner />
       </div>
 
-      <ToastBanner />
-      <MeterReadouts output={evaluation.output} />
-      <ControlPanel controls={experiment.controls} />
+      <RightSidebar controls={experiment.controls} output={evaluation.output} />
     </div>
   );
 }

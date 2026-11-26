@@ -9,6 +9,27 @@ import type {
 } from '../core/types';
 
 const PROGRESS_STORAGE_KEY = 'vml_progress_v1';
+const SIDEBAR_STORAGE_KEY = 'vml-sidebar';
+const NUMERIC_READOUTS_STORAGE_KEY = 'vml-numeric-readouts';
+
+function loadBoolPref(key: string, fallback: boolean): boolean {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === 'true' || raw === 'open') return true;
+    if (raw === 'false' || raw === 'closed') return false;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function savePref(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // ignore storage errors
+  }
+}
 
 interface StoredProgress {
   attempts: Record<string, number>;
@@ -56,6 +77,8 @@ interface SessionState {
   showingSolution: boolean;
   cameraPreset: CameraPreset | null;
   showTerminalLabels: boolean;
+  sidebarOpen: boolean;
+  showNumericReadouts: boolean;
   toasts: RuntimeEvent[];
 
   goToScreen: (screen: AppScreen) => void;
@@ -63,6 +86,9 @@ interface SessionState {
   setMode: (mode: LabMode) => void;
   setCameraPreset: (preset: CameraPreset | null) => void;
   toggleTerminalLabels: () => void;
+  toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
+  toggleNumericReadouts: () => void;
   submitWiring: (wires: Wire[]) => ValidationResult;
   retry: () => void;
   nextHint: () => void;
@@ -87,6 +113,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   showingSolution: false,
   cameraPreset: 'overview',
   showTerminalLabels: false,
+  sidebarOpen:
+    typeof window !== 'undefined' ? loadBoolPref(SIDEBAR_STORAGE_KEY, true) : true,
+  showNumericReadouts:
+    typeof window !== 'undefined'
+      ? loadBoolPref(NUMERIC_READOUTS_STORAGE_KEY, true)
+      : true,
   toasts: [],
 
   goToScreen: (screen) => set({ screen }),
@@ -106,6 +138,25 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   toggleTerminalLabels: () =>
     set((state) => ({ showTerminalLabels: !state.showTerminalLabels })),
+
+  toggleSidebar: () =>
+    set((state) => {
+      const next = !state.sidebarOpen;
+      savePref(SIDEBAR_STORAGE_KEY, next ? 'open' : 'closed');
+      return { sidebarOpen: next };
+    }),
+
+  setSidebarOpen: (open) => {
+    savePref(SIDEBAR_STORAGE_KEY, open ? 'open' : 'closed');
+    set({ sidebarOpen: open });
+  },
+
+  toggleNumericReadouts: () =>
+    set((state) => {
+      const next = !state.showNumericReadouts;
+      savePref(NUMERIC_READOUTS_STORAGE_KEY, String(next));
+      return { showNumericReadouts: next };
+    }),
 
   submitWiring: (wires) => {
     const { experimentId, attempts, completedExperiments } = get();

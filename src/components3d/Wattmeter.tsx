@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { getComponentDef } from '../core/components';
 import type { ComponentInstance, WattmeterReading } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
+import { useSessionStore } from '../stores/sessionStore';
 import { LabelPlate, MeterDial } from './LabelPlate';
 import { Terminal } from './Terminal';
 
@@ -23,6 +24,7 @@ export function Wattmeter({
   iOptions,
 }: WattmeterProps) {
   const def = getComponentDef(instance.type);
+  const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
   const cycleWmVRange = useControlsStore((s) => s.cycleWmVRange);
   const cycleWmIRange = useControlsStore((s) => s.cycleWmIRange);
   const [hoveredSel, setHoveredSel] = useState<'v' | 'i' | null>(null);
@@ -57,6 +59,7 @@ export function Wattmeter({
         maxScale={150}
         pointerRatio={reading?.pointerRatio ?? 0}
         readingText={readingText}
+        showNumericReadout={showNumericReadouts}
         width={0.78}
         height={0.48}
         position={[0, 0.49, -0.03]}

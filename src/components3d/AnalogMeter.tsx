@@ -1,5 +1,6 @@
 import { getComponentDef } from '../core/components';
 import type { AnalogMeterReading, ComponentInstance } from '../core/types';
+import { useSessionStore } from '../stores/sessionStore';
 import { LabelPlate, MeterDial } from './LabelPlate';
 import { Terminal } from './Terminal';
 
@@ -10,6 +11,7 @@ interface AnalogMeterProps {
 
 export function AnalogMeter({ instance, reading }: AnalogMeterProps) {
   const def = getComponentDef(instance.type);
+  const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
   const isAmmeter = instance.type === 'ammeter';
   const range = Number(instance.params.range ?? (isAmmeter ? 25 : 300));
   const unit = isAmmeter ? 'A (AC)' : 'V (AC)';
@@ -46,6 +48,7 @@ export function AnalogMeter({ instance, reading }: AnalogMeterProps) {
         maxScale={range}
         pointerRatio={reading?.pointerRatio ?? 0}
         readingText={readingText}
+        showNumericReadout={showNumericReadouts}
         width={0.64}
         height={0.44}
         position={[0, 0.44, -0.01]}
