@@ -186,7 +186,7 @@ export function ExperimentPicker() {
               className="font-mono text-xs font-semibold tracking-wider uppercase"
               style={{ color: 'var(--vml-accent)' }}
             >
-              EEC2910 · Electrical Machines Lab 1
+              EEC2912 · Electrical Machines Lab 1
             </p>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
               Virtual Machines Lab

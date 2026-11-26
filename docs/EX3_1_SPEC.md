@@ -1,6 +1,6 @@
 # Exp 3.1 Spec and Antigravity Prompts
 
-Companion to Virtual Machines Lab: Architecture v0.1. Experiment: EEC2910 Ex3.1, Load test of single-phase transformer. Where this spec and the architecture doc disagree for Exp 3.1, this spec wins (see Section 11 for the architecture changes it implies).
+Companion to Virtual Machines Lab: Architecture v0.1. Experiment: EEC2912 Ex3.1, Load test of single-phase transformer. Where this spec and the architecture doc disagree for Exp 3.1, this spec wins (see Section 11 for the architecture changes it implies).
 
 ## 1. Experiment summary
 
