@@ -67,6 +67,8 @@ export function App() {
   const goToScreen = useSessionStore((s) => s.goToScreen);
   const setCurrentStageIndex = useSessionStore((s) => s.setCurrentStageIndex);
   const switchObserveStage = useSessionStore((s) => s.switchObserveStage);
+  const switchSelfStage = useSessionStore((s) => s.switchSelfStage);
+  const switchLearnStage = useSessionStore((s) => s.switchLearnStage);
   const continueToNextStage = useSessionStore((s) => s.continueToNextStage);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
@@ -676,7 +678,7 @@ export function App() {
           {/* Stage stepper / tabs when experiment has multiple stages */}
           {hasMultipleStages && (
             <div
-              role={isObserve ? 'tablist' : undefined}
+              role="tablist"
               aria-label="Experiment stages"
               className="pointer-events-auto flex items-center gap-0.5 rounded-full p-1 shadow-lg backdrop-blur"
               style={{
@@ -688,44 +690,36 @@ export function App() {
               {experiment.stages.map((st, idx) => {
                 const active = idx === currentStageIndex;
                 const wired = wiredStageIds.has(st.id);
-                if (isObserve) {
-                  return (
-                    <button
-                      key={st.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => switchObserveStage(idx)}
-                      className="h-6 rounded-full px-2.5 text-xs font-semibold transition"
-                      style={{
-                        backgroundColor: active
-                          ? 'var(--vml-accent)'
-                          : 'transparent',
-                        color: active
-                          ? 'var(--vml-accent-text)'
-                          : 'var(--vml-text)',
-                      }}
-                    >
-                      {idx + 1}. {st.title}
-                    </button>
-                  );
-                }
+                const handleStageSelect = () => {
+                  clearWireTimers();
+                  if (isObserve) {
+                    switchObserveStage(idx);
+                  } else if (isSelf) {
+                    switchSelfStage(idx);
+                  } else if (isLearn) {
+                    switchLearnStage(idx);
+                  }
+                };
                 return (
-                  <span
+                  <button
                     key={st.id}
-                    className="inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-xs font-semibold"
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={handleStageSelect}
+                    className="h-6 rounded-full px-2.5 text-xs font-semibold transition"
                     style={{
                       backgroundColor: active
                         ? 'var(--vml-accent)'
                         : 'transparent',
                       color: active
                         ? 'var(--vml-accent-text)'
-                        : 'var(--vml-text-muted)',
+                        : 'var(--vml-text)',
                     }}
                   >
-                    {wired && !active ? '✓ ' : ''}
+                    {isSelf && wired && !active ? '✓ ' : ''}
                     {idx + 1}. {st.title}
-                  </span>
+                  </button>
                 );
               })}
             </div>

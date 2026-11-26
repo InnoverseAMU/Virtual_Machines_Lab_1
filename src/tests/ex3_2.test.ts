@@ -448,5 +448,51 @@ describe('Exp 3.2: Open-Circuit and Short-Circuit Tests', () => {
       expect(reportRes.passed, reportRes.failedCriteria.join('; ')).toBe(true);
       expect(useSessionStore.getState().runCompleted['ex3.2']).toBe(true);
     });
+
+    it('supports directly toggling between OC and SC stages in Self and Learn modes', () => {
+      // Self mode toggle preserves per-stage wires and observation rows
+      enterLabMode('ex3.2', 'self');
+      const s0 = getStage(ex3_2, 0);
+      const s1 = getStage(ex3_2, 1);
+
+      const ocPairs = wiresFromNetlist(
+        s0.acceptedNetlists[0],
+        collectInternalLinks(getStageComponents(ex3_2, s0)),
+      );
+      useWiringStore.getState().setSolutionWires(ocPairs);
+      expect(useWiringStore.getState().wires).toHaveLength(ocPairs.length);
+
+      useSessionStore.getState().switchSelfStage(1);
+      expect(useSessionStore.getState().currentStageIndex).toBe(1);
+      expect(useWiringStore.getState().wires).toHaveLength(0);
+
+      const scPairs = wiresFromNetlist(
+        s1.acceptedNetlists[0],
+        collectInternalLinks(getStageComponents(ex3_2, s1)),
+      );
+      useWiringStore.getState().setSolutionWires(scPairs);
+
+      // Toggle back to Open-Circuit stage and confirm OC wires are restored
+      useSessionStore.getState().switchSelfStage(0);
+      expect(useSessionStore.getState().currentStageIndex).toBe(0);
+      expect(useWiringStore.getState().wires).toHaveLength(ocPairs.length);
+
+      // Toggle forward to Short-Circuit stage again and confirm SC wires are restored
+      useSessionStore.getState().switchSelfStage(1);
+      expect(useSessionStore.getState().currentStageIndex).toBe(1);
+      expect(useWiringStore.getState().wires).toHaveLength(scPairs.length);
+
+      // Learn mode toggle jumps to target stage's first step cleanly
+      enterLabMode('ex3.2', 'learn');
+      useSessionStore.getState().switchLearnStage(1);
+      expect(useSessionStore.getState().currentStageIndex).toBe(1);
+      const steps = getAllLearnSteps(ex3_2);
+      const scStartIdx = steps.findIndex((st) => st.stageId === s1.id);
+      expect(useSessionStore.getState().learnStepIndex).toBe(scStartIdx);
+
+      useSessionStore.getState().switchLearnStage(0);
+      expect(useSessionStore.getState().currentStageIndex).toBe(0);
+      expect(useSessionStore.getState().learnStepIndex).toBe(0);
+    });
   });
 });

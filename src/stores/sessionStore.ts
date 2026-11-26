@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
 import {
   applyStageCarryOver,
+  getAllLearnSteps,
   getStage,
   getStageComponents,
 } from '../core/circuit/stages';
@@ -26,6 +27,7 @@ import type {
   TransformerLoadOutput,
   ValidationResult,
   Wire,
+  WireEndpointPair,
 } from '../core/types';
 import { useControlsStore } from './controlsStore';
 import { useWiringStore } from './wiringStore';
@@ -174,6 +176,7 @@ interface SessionState {
   runPractised: Record<string, boolean>;
 
   // Self mode per-run state (never persisted)
+  wiresByStage: Record<string, WireEndpointPair[]>;
   hintLevel: number;
   usedSolutionInRun: boolean;
   validationResult: ValidationResult | null;
@@ -215,6 +218,8 @@ interface SessionState {
   setSessionSeed: (seed: number) => void;
   setCurrentStageIndex: (index: number) => void;
   switchObserveStage: (index: number) => void;
+  switchSelfStage: (index: number) => void;
+  switchLearnStage: (index: number) => void;
   continueToNextStage: () => void;
   setCameraPreset: (preset: CameraPreset | null) => void;
   toggleTerminalLabels: () => void;
@@ -290,6 +295,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   mode: 'self',
   sessionSeed: createSessionSeed(),
   currentStageIndex: 0,
+  wiresByStage: {},
 
   attempts: initialProgress.attempts,
   completedExperiments: initialProgress.completedExperiments,
@@ -344,6 +350,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({
       experimentId,
       currentStageIndex: 0,
+  wiresByStage: {},
       hintLevel: 0,
       usedSolutionInRun: false,
       validationResult: null,
@@ -413,42 +420,56 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     });
   },
 
-  continueToNextStage: () => {
+  switchSelfStage: (index) => {
     const {
       experimentId,
       currentStageIndex,
       observationRowsByStage,
+      wiresByStage,
       sessionSeed,
     } = get();
     const exp = getExperiment(experimentId);
-    if (currentStageIndex >= exp.stages.length - 1) return;
+    const clamped = Math.max(0, Math.min(exp.stages.length - 1, index));
+    if (clamped === currentStageIndex) return;
 
-    const nextIndex = currentStageIndex + 1;
-    const nextStage = getStage(exp, nextIndex);
-    const nextComps = getStageComponents(exp, nextStage);
+    const currentStage = getStage(exp, currentStageIndex);
+    const targetStage = getStage(exp, clamped);
+    const targetComps = getStageComponents(exp, targetStage);
+
+    const currentWires = useWiringStore.getState().wires;
+    const nextWiresByStage: Record<string, WireEndpointPair[]> = {
+      ...wiresByStage,
+      [currentStage.id]: currentWires.map((w) => [w.a, w.b] as WireEndpointPair),
+    };
 
     useControlsStore
       .getState()
       .initFromControls(
-        nextStage.controls,
+        targetStage.controls,
         sessionSeed,
-        getStageMeterIds(experimentId, nextIndex),
+        getStageMeterIds(experimentId, clamped),
       );
     const nextControlValues = useControlsStore.getState().values;
-    const currentWires = useWiringStore.getState().wires;
-    const carried = applyStageCarryOver(
-      currentWires,
-      nextStage,
-      nextComps,
-      nextControlValues,
-    );
-    useWiringStore
-      .getState()
-      .setSolutionWires(carried.map((w) => [w.a, w.b]));
+
+    const savedTargetWires = nextWiresByStage[targetStage.id];
+    if (savedTargetWires) {
+      useWiringStore.getState().setSolutionWires(savedTargetWires);
+    } else {
+      const carried = applyStageCarryOver(
+        currentWires,
+        targetStage,
+        targetComps,
+        nextControlValues,
+      );
+      useWiringStore
+        .getState()
+        .setSolutionWires(carried.map((w) => [w.a, w.b]));
+    }
 
     set({
-      currentStageIndex: nextIndex,
-      observationRows: observationRowsByStage[nextStage.id] ?? [],
+      currentStageIndex: clamped,
+      wiresByStage: nextWiresByStage,
+      observationRows: observationRowsByStage[targetStage.id] ?? [],
       hintLevel: 0,
       validationResult: null,
       resultModalOpen: false,
@@ -456,6 +477,41 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       cameraPreset: 'overview',
       toasts: [],
     });
+  },
+
+  switchLearnStage: (index) => {
+    const { experimentId, observationRowsByStage, sessionSeed } = get();
+    const exp = getExperiment(experimentId);
+    const clamped = Math.max(0, Math.min(exp.stages.length - 1, index));
+    const targetStage = getStage(exp, clamped);
+    const allSteps = getAllLearnSteps(exp);
+    const firstStepIdx = allSteps.findIndex((s) => s.stageId === targetStage.id);
+
+    useControlsStore
+      .getState()
+      .initFromControls(
+        targetStage.controls,
+        sessionSeed,
+        getStageMeterIds(experimentId, clamped),
+      );
+    useWiringStore.getState().clearAllWiresScripted();
+
+    set({
+      currentStageIndex: clamped,
+      learnStepIndex: firstStepIdx >= 0 ? firstStepIdx : 0,
+      learnNoLoadAck: false,
+      learnFinished: false,
+      observationRows: observationRowsByStage[targetStage.id] ?? [],
+      highlightedNetIndex: null,
+      highlightedNetPinned: false,
+      cameraPreset: 'overview',
+      toasts: [],
+    });
+  },
+
+  continueToNextStage: () => {
+    const { currentStageIndex } = get();
+    get().switchSelfStage(currentStageIndex + 1);
   },
 
   setCameraPreset: (cameraPreset) => set({ cameraPreset }),
@@ -831,6 +887,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   resetLearnRun: () =>
     set({
       currentStageIndex: 0,
+  wiresByStage: {},
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -854,6 +911,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   resetLabSession: () =>
     set({
       currentStageIndex: 0,
+  wiresByStage: {},
       hintLevel: 0,
       usedSolutionInRun: false,
       validationResult: null,
