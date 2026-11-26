@@ -1,3 +1,4 @@
+import { useFrame } from '@react-three/fiber';
 import gsap from 'gsap';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
@@ -17,6 +18,66 @@ interface WireMeshProps {
   ghost?: boolean;
   highlighted?: boolean;
   dimmed?: boolean;
+  flowDirection?: -1 | 0 | 1;
+  flowCurrentA?: number;
+}
+
+const PARTICLE_COUNT = 3;
+const SHARED_PARTICLE_GEO = new THREE.SphereGeometry(0.027, 10, 10);
+const _scratchPos = new THREE.Vector3();
+
+function WireFlowParticles({
+  curve,
+  direction,
+  currentA,
+}: {
+  curve: THREE.QuadraticBezierCurve3;
+  direction: -1 | 1;
+  currentA: number;
+}) {
+  const particleRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const phaseRef = useRef(0);
+
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.05);
+    const cyclesPerSec = Math.min(
+      0.62,
+      Math.max(0.24, 0.22 + Math.log10(1 + Math.max(0, currentA)) * 0.25),
+    );
+    phaseRef.current = (phaseRef.current + dt * cyclesPerSec) % 1;
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const mesh = particleRefs.current[i];
+      if (!mesh) continue;
+      const u = (phaseRef.current + i / PARTICLE_COUNT) % 1;
+      const t = direction > 0 ? u : 1 - u;
+      curve.getPoint(t, _scratchPos);
+      mesh.position.copy(_scratchPos);
+      const envelope = 0.45 + 0.55 * Math.sin(Math.PI * u);
+      mesh.scale.setScalar(envelope);
+    }
+  });
+
+  return (
+    <group>
+      {Array.from({ length: PARTICLE_COUNT }, (_, i) => (
+        <mesh
+          key={i}
+          ref={(el) => {
+            particleRefs.current[i] = el;
+          }}
+          geometry={SHARED_PARTICLE_GEO}
+        >
+          <meshBasicMaterial
+            color="#e0f2fe"
+            transparent
+            opacity={0.78}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
 }
 
 export function WireMesh({
@@ -28,6 +89,8 @@ export function WireMesh({
   ghost = false,
   highlighted = false,
   dimmed = false,
+  flowDirection = 0,
+  flowCurrentA = 0,
 }: WireMeshProps) {
   const [hovered, setHovered] = useState(false);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -49,8 +112,8 @@ export function WireMesh({
     [components, wire.b],
   );
 
-  const geometry = useMemo(() => {
-    if (!startPos || !endPos) return null;
+  const { curve, geometry } = useMemo(() => {
+    if (!startPos || !endPos) return { curve: null, geometry: null };
     const yLift = ghost ? 0.035 : 0;
     const p0 = new THREE.Vector3(
       startPos[0],
@@ -75,8 +138,11 @@ export function WireMesh({
         : Math.max(0.05, 0.08 + (wireIndexInNet % 3) * 0.02)) + yLift;
 
     const p1 = new THREE.Vector3(midX, sagY, maxZ + forwardBump);
-    const curve = new THREE.QuadraticBezierCurve3(p0, p1, p2);
-    return new THREE.TubeGeometry(curve, 32, ghost ? 0.017 : 0.022, 10, false);
+    const bezier = new THREE.QuadraticBezierCurve3(p0, p1, p2);
+    return {
+      curve: bezier,
+      geometry: new THREE.TubeGeometry(bezier, 32, ghost ? 0.017 : 0.022, 10, false),
+    };
   }, [startPos, endPos, netIndex, wireIndexInNet, ghost]);
 
   useEffect(() => {
@@ -114,50 +180,59 @@ export function WireMesh({
     };
   }, [ghost]);
 
-  if (!geometry) return null;
+  if (!geometry || !curve) return null;
 
   const baseColor =
     NET_WIRE_COLORS[Math.abs(netIndex) % NET_WIRE_COLORS.length];
 
   return (
-    <mesh
-      ref={meshRef}
-      geometry={geometry}
-      castShadow={!ghost}
-      onClick={(e) => {
-        if (blockClick) return;
-        e.stopPropagation();
-        removeWire(wire.id, supplyOn);
-        document.body.style.cursor = cursorLocked ? 'default' : 'auto';
-      }}
-      onPointerOver={(e) => {
-        if (blockClick) return;
-        e.stopPropagation();
-        setHovered(!isObserveMode);
-        document.body.style.cursor = cursorLocked ? 'default' : 'pointer';
-      }}
-      onPointerOut={(e) => {
-        if (blockClick) return;
-        e.stopPropagation();
-        setHovered(false);
-        document.body.style.cursor = 'auto';
-      }}
-    >
-      <meshStandardMaterial
-        ref={matRef}
-        color={ghost ? '#38bdf8' : hovered ? '#ffffff' : baseColor}
-        emissive={
-          ghost ? '#0ea5e9' : highlighted || hovered ? baseColor : '#000000'
-        }
-        emissiveIntensity={
-          ghost ? 0.5 : highlighted ? 0.75 : hovered ? 0.6 : 0
-        }
-        roughness={0.4}
-        metalness={0.1}
-        transparent={ghost || dimmed}
-        opacity={ghost ? 0.65 : dimmed ? 0.16 : 1}
-        depthWrite={!ghost && !dimmed}
-      />
-    </mesh>
+    <group>
+      <mesh
+        ref={meshRef}
+        geometry={geometry}
+        castShadow={!ghost}
+        onClick={(e) => {
+          if (blockClick) return;
+          e.stopPropagation();
+          removeWire(wire.id, supplyOn);
+          document.body.style.cursor = cursorLocked ? 'default' : 'auto';
+        }}
+        onPointerOver={(e) => {
+          if (blockClick) return;
+          e.stopPropagation();
+          setHovered(!isObserveMode);
+          document.body.style.cursor = cursorLocked ? 'default' : 'pointer';
+        }}
+        onPointerOut={(e) => {
+          if (blockClick) return;
+          e.stopPropagation();
+          setHovered(false);
+          document.body.style.cursor = 'auto';
+        }}
+      >
+        <meshStandardMaterial
+          ref={matRef}
+          color={ghost ? '#38bdf8' : hovered ? '#ffffff' : baseColor}
+          emissive={
+            ghost ? '#0ea5e9' : highlighted || hovered ? baseColor : '#000000'
+          }
+          emissiveIntensity={
+            ghost ? 0.5 : highlighted ? 0.75 : hovered ? 0.6 : 0
+          }
+          roughness={0.4}
+          metalness={0.1}
+          transparent={ghost || dimmed}
+          opacity={ghost ? 0.65 : dimmed ? 0.16 : 1}
+          depthWrite={!ghost && !dimmed}
+        />
+      </mesh>
+      {!ghost && !dimmed && flowDirection !== 0 && (
+        <WireFlowParticles
+          curve={curve}
+          direction={flowDirection}
+          currentA={flowCurrentA}
+        />
+      )}
+    </group>
   );
 }

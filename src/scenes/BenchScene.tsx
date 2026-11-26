@@ -6,6 +6,7 @@ import type { ComponentRef } from 'react';
 import * as THREE from 'three';
 import { ComponentRenderer } from '../components3d/ComponentRenderer';
 import { WireMesh } from '../components3d/Wire';
+import { computeWireCurrentFlows } from '../core/circuit/flow';
 import { COMPONENT_FOOTPRINTS } from '../core/circuit/layout';
 import { buildNets, collectInternalLinks } from '../core/circuit/nets';
 import {
@@ -389,6 +390,18 @@ export function BenchScene({
     });
   }, [wires, netGraph]);
 
+  const wireFlows = useMemo(
+    () =>
+      computeWireCurrentFlows(
+        stageComponents,
+        wires,
+        controlValues,
+        labOutput,
+        connectionState,
+      ),
+    [stageComponents, wires, controlValues, labOutput, connectionState],
+  );
+
   const ghostWireMeta = useMemo(() => {
     if (!showingSolution) return [];
     const pairs = netlistToWirePairs(
@@ -558,6 +571,7 @@ export function BenchScene({
           highlightedNetTerminals.has(wire.b);
         const isWireDimmed =
           highlightedNetTerminals !== null && !isWireHighlighted;
+        const flow = wireFlows.get(wire.id);
         return (
           <WireMesh
             key={wire.id}
@@ -567,6 +581,8 @@ export function BenchScene({
             wireIndexInNet={idxInNet}
             highlighted={isWireHighlighted}
             dimmed={isWireDimmed}
+            flowDirection={flow?.direction ?? 0}
+            flowCurrentA={flow?.currentA ?? 0}
           />
         );
       })}
