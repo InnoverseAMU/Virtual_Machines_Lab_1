@@ -46,7 +46,7 @@ export function ExperimentPicker() {
         }}
       >
         <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
             <span
               className="rounded-md px-2 py-0.5 font-mono text-xs font-bold"
               style={{
@@ -60,31 +60,34 @@ export function ExperimentPicker() {
             >
               Exp {exp.number}
             </span>
-            {!exp.available ? (
-              <span
-                className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                style={{
-                  backgroundColor: 'var(--vml-panel-hover)',
-                  color: 'var(--vml-text-muted)',
-                }}
-              >
-                Coming soon
-              </span>
-            ) : isCompleted ? (
-              <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                Completed{usedSol ? ' (with solution)' : ''}
-              </span>
-            ) : (
-              <span
-                className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                style={{
-                  backgroundColor: 'var(--vml-panel-hover)',
-                  color: 'var(--vml-accent)',
-                }}
-              >
-                Available
-              </span>
-            )}
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {!exp.available ? (
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    color: 'var(--vml-text-muted)',
+                  }}
+                >
+                  Coming soon
+                </span>
+              ) : isCompleted ? (
+                <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                  Completed
+                </span>
+              ) : (
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    color: 'var(--vml-accent)',
+                  }}
+                >
+                  Available
+                </span>
+              )}
+            </div>
           </div>
 
           <h3 className="text-sm leading-snug font-semibold">{exp.title}</h3>
@@ -92,10 +95,23 @@ export function ExperimentPicker() {
 
         {exp.available && (
           <div
-            className="flex items-center justify-between text-xs"
+            className="flex flex-wrap items-center justify-between gap-2 text-xs"
             style={{ color: 'var(--vml-text-muted)' }}
           >
-            <span>Attempts: {attemptCount}</span>
+            <div className="flex items-center gap-2">
+              <span>Attempts: {attemptCount}</span>
+              {usedSol && (
+                <span
+                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  Used solution
+                </span>
+              )}
+            </div>
             <span style={{ color: 'var(--vml-accent)' }} className="font-semibold">
               Select →
             </span>
@@ -109,7 +125,7 @@ export function ExperimentPicker() {
     <div
       className="fixed inset-0 overflow-y-auto px-4 py-6 sm:px-6 md:py-10"
       style={{
-        backgroundColor: 'var(--vml-tooltip-bg)',
+        backgroundColor: 'var(--vml-page-bg)',
         color: 'var(--vml-text)',
       }}
     >

@@ -201,6 +201,38 @@ describe('Exp 3.1 wiring validation (union-find nets)', () => {
     });
   });
 
+  it('reports a shorts entry when a wire joins two different required nets', () => {
+    const shorted: WireEndpointPair[] = [...CANONICAL_WIRES, ['tx.S1', 'tx.S2']];
+    const res = validateWiring(ex3_1, shorted);
+    expect(res.correct).toBe(false);
+    expect(res.shorts.length).toBeGreaterThanOrEqual(1);
+    expect(res.shorts[0].mergedNetIndices).toEqual([4, 6]);
+  });
+
+  it('reports an extras entry when an extra wire connects an unused terminal', () => {
+    const expWithSpareTerminal = {
+      ...ex3_1,
+      components: [
+        ...ex3_1.components,
+        {
+          id: 'aux',
+          type: 'voltmeter' as const,
+          label: 'Spare meter',
+          position: [0, 0, 0] as [number, number, number],
+          params: { range: 300 },
+        },
+      ],
+    };
+    const withExtra: WireEndpointPair[] = [
+      ...CANONICAL_WIRES,
+      ['sup.N', 'aux.A'],
+    ];
+    const res = validateWiring(expWithSpareTerminal, withExtra);
+    expect(res.correct).toBe(false);
+    expect(res.extras.length).toBe(1);
+    expect(res.extras[0].extraTerminals).toContain('aux.A');
+  });
+
   it('detects voltmeter-in-series-primary (stretch)', () => {
     const wires: WireEndpointPair[] = [
       ...CANONICAL_WIRES.filter(

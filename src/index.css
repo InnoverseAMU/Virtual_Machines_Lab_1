@@ -1,5 +1,36 @@
 @import "tailwindcss";
 
+:root,
+:root[data-theme="dark"] {
+  --vml-page-bg: #0f172a;
+  --vml-panel: rgba(15, 23, 42, 0.92);
+  --vml-panel-hover: #1e293b;
+  --vml-text: #f8fafc;
+  --vml-text-muted: #cbd5e1;
+  --vml-border: rgba(71, 85, 105, 0.85);
+  --vml-accent: #0ea5e9;
+  --vml-accent-text: #020617;
+  --vml-tooltip-bg: #0f172a;
+  --vml-tooltip-text: #f8fafc;
+  --vml-tooltip-border: #475569;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --vml-page-bg: #f1f5f9;
+  --vml-panel: rgba(255, 255, 255, 0.92);
+  --vml-panel-hover: #e2e8f0;
+  --vml-text: #0f172a;
+  --vml-text-muted: #334155;
+  --vml-border: rgba(148, 163, 184, 0.85);
+  --vml-accent: #0284c7;
+  --vml-accent-text: #ffffff;
+  --vml-tooltip-bg: #ffffff;
+  --vml-tooltip-text: #0f172a;
+  --vml-tooltip-border: #94a3b8;
+  color-scheme: light;
+}
+
 html,
 body,
 #root {
@@ -8,38 +39,6 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-}
-
-:root,
-:root[data-theme="dark"] {
-  --vml-panel: rgba(15, 23, 42, 0.88);
-  --vml-panel-hover: #1e293b;
-  --vml-text: #f8fafc;
-  --vml-text-muted: #cbd5e1;
-  --vml-border: rgba(71, 85, 105, 0.85);
-  --vml-accent: #0ea5e9;
-  --vml-accent-text: #020617;
-  --vml-tooltip-bg: rgba(15, 23, 42, 0.96);
-  --vml-tooltip-text: #f8fafc;
-  --vml-tooltip-border: #475569;
-  color-scheme: dark;
-}
-
-:root[data-theme="light"] {
-  --vml-panel: rgba(255, 255, 255, 0.9);
-  --vml-panel-hover: #e2e8f0;
-  --vml-text: #0f172a;
-  --vml-text-muted: #334155;
-  --vml-border: rgba(148, 163, 184, 0.85);
-  --vml-accent: #0284c7;
-  --vml-accent-text: #ffffff;
-  --vml-tooltip-bg: rgba(255, 255, 255, 0.97);
-  --vml-tooltip-text: #0f172a;
-  --vml-tooltip-border: #94a3b8;
-  color-scheme: light;
-}
-
-body {
-  background-color: var(--vml-panel);
+  background-color: var(--vml-page-bg);
   color: var(--vml-text);
 }

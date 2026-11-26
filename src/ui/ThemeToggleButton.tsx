@@ -53,7 +53,7 @@ export function ThemeToggleButton() {
       type="button"
       onClick={cycleMode}
       aria-label={`Color theme: ${MODE_LABELS[mode]} (${resolved}). Click to cycle system, light, dark.`}
-      className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+      className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium shadow-lg backdrop-blur transition"
       style={{
         backgroundColor: 'var(--vml-panel)',
         border: '1px solid var(--vml-border)',

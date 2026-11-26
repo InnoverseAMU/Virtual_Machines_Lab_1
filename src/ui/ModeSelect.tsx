@@ -27,7 +27,7 @@ export function ModeSelect() {
     <div
       className="fixed inset-0 overflow-y-auto px-4 py-6 sm:px-6 md:py-10"
       style={{
-        backgroundColor: 'var(--vml-tooltip-bg)',
+        backgroundColor: 'var(--vml-page-bg)',
         color: 'var(--vml-text)',
       }}
     >
@@ -107,12 +107,18 @@ export function ModeSelect() {
                   Active
                 </span>
               </div>
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--vml-text-muted)' }}>
-                Start with an empty bench, wire the circuit yourself, energise the
-                supply, and submit for net-based validation and fault diagnostics.
+              <p
+                className="text-xs leading-relaxed"
+                style={{ color: 'var(--vml-text-muted)' }}
+              >
+                Wire the circuit yourself, switch on, and submit to have your
+                connections checked.
               </p>
             </div>
-            <span className="text-xs font-semibold" style={{ color: 'var(--vml-accent)' }}>
+            <span
+              className="text-xs font-semibold"
+              style={{ color: 'var(--vml-accent)' }}
+            >
               Enter bench →
             </span>
           </button>
@@ -140,13 +146,18 @@ export function ModeSelect() {
                   Coming soon
                 </span>
               </div>
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--vml-text-muted)' }}>
-                Step-by-step guided walkthrough explaining why each connection and
-                instrument is placed in the circuit.
+              <p
+                className="text-xs leading-relaxed"
+                style={{ color: 'var(--vml-text-muted)' }}
+              >
+                Guided step-by-step walkthrough of the circuit connections.
               </p>
             </div>
-            <span className="text-xs font-medium" style={{ color: 'var(--vml-text-muted)' }}>
-              Milestone 3
+            <span
+              className="text-xs font-medium"
+              style={{ color: 'var(--vml-text-muted)' }}
+            >
+              Coming soon
             </span>
           </button>
         </div>

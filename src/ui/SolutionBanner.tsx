@@ -33,12 +33,12 @@ export function SolutionBanner({ experiment }: SolutionBannerProps) {
     >
       <div className="min-w-44 flex-1">
         <div className="font-bold" style={{ color: 'var(--vml-accent)' }}>
-          Solution Overlay (Netlist A)
+          Solution Overlay
         </div>
         <div className="text-[11px]" style={{ color: 'var(--vml-text-muted)' }}>
           {supplyOn
             ? 'Shut off the supply before applying solution wires.'
-            : experiment.solutionNote}
+            : 'Connection (a) shown as dashed blue wires. Connection (b) with V1 tied to L is also valid.'}
         </div>
       </div>
 

@@ -33,6 +33,7 @@ export function App() {
   const [confirmAction, setConfirmAction] = useState<'back' | 'reset' | null>(
     null,
   );
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const screen = useSessionStore((s) => s.screen);
   const experimentId = useSessionStore((s) => s.experimentId);
@@ -187,13 +188,13 @@ export function App() {
         />
 
         {/* Top bar */}
-        <div className="pointer-events-none absolute inset-x-0 top-2.5 z-20 flex flex-wrap items-center justify-between gap-2 px-2.5 md:px-3">
-          {/* Left group: Back + self-mode primary actions */}
-          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+        <div className="pointer-events-none absolute inset-x-0 top-2.5 z-20 flex flex-wrap items-center justify-between gap-1.5 px-2.5 md:px-3">
+          {/* Left group: Back + self-mode actions */}
+          <div className="pointer-events-auto flex items-center gap-1.5">
             <button
               type="button"
               onClick={handleBackClick}
-              className="rounded-full px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur transition"
+              className="h-8 rounded-full px-2.5 text-xs font-semibold shadow-lg backdrop-blur transition"
               style={{
                 backgroundColor: 'var(--vml-panel)',
                 border: '1px solid var(--vml-border)',
@@ -206,7 +207,7 @@ export function App() {
             <button
               type="button"
               onClick={() => submitWiring(wires)}
-              className="rounded-full px-3.5 py-1.5 text-xs font-bold shadow-lg transition"
+              className="h-8 rounded-full px-3 text-xs font-bold shadow-lg transition"
               style={{
                 backgroundColor: 'var(--vml-accent)',
                 color: 'var(--vml-accent-text)',
@@ -219,7 +220,7 @@ export function App() {
               <button
                 type="button"
                 onClick={openLastResult}
-                className="rounded-full px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur transition"
+                className="hidden h-8 rounded-full px-2.5 text-xs font-semibold shadow-lg backdrop-blur transition sm:inline-flex sm:items-center"
                 style={{
                   backgroundColor: 'var(--vml-panel)',
                   border: '1px solid var(--vml-border)',
@@ -233,7 +234,7 @@ export function App() {
             <button
               type="button"
               onClick={() => setConfirmAction('reset')}
-              className="rounded-full px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur transition"
+              className="hidden h-8 rounded-full px-2.5 text-xs font-semibold shadow-lg backdrop-blur transition sm:inline-flex sm:items-center"
               style={{
                 backgroundColor: 'var(--vml-panel)',
                 border: '1px solid var(--vml-border)',
@@ -246,7 +247,7 @@ export function App() {
 
           {/* Center group: camera presets */}
           <div
-            className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full p-1 shadow-lg backdrop-blur"
+            className="pointer-events-auto order-3 flex w-full items-center justify-center gap-0.5 rounded-full p-1 shadow-lg backdrop-blur sm:order-none sm:w-auto"
             style={{
               backgroundColor: 'var(--vml-panel)',
               border: '1px solid var(--vml-border)',
@@ -260,7 +261,7 @@ export function App() {
                   key={p.id}
                   type="button"
                   onClick={() => setCameraPreset(p.id)}
-                  className="rounded-full px-2.5 py-1 text-xs font-medium transition"
+                  className="h-6 rounded-full px-2 text-xs font-medium transition md:px-2.5"
                   style={{
                     backgroundColor: active
                       ? 'var(--vml-accent)'
@@ -276,15 +277,15 @@ export function App() {
             })}
           </div>
 
-          {/* Right group: theme, labels, sidebar, wire count */}
-          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+          {/* Right group: theme, labels, panel toggle, and phone More menu */}
+          <div className="pointer-events-auto relative flex items-center gap-1.5">
             <ThemeToggleButton />
 
             <button
               type="button"
               onClick={toggleTerminalLabels}
               aria-pressed={showTerminalLabels}
-              className="rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+              className="hidden h-8 rounded-full px-2.5 text-xs font-medium shadow-lg backdrop-blur transition sm:inline-flex sm:items-center"
               style={{
                 backgroundColor: showTerminalLabels
                   ? 'var(--vml-accent)'
@@ -303,7 +304,7 @@ export function App() {
               onClick={toggleSidebar}
               aria-label={sidebarOpen ? 'Hide sidebar (S)' : 'Show sidebar (S)'}
               aria-expanded={sidebarOpen}
-              className="rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+              className="h-8 rounded-full px-2.5 text-xs font-medium shadow-lg backdrop-blur transition"
               style={{
                 backgroundColor: sidebarOpen
                   ? 'var(--vml-accent)'
@@ -317,8 +318,68 @@ export function App() {
               Panel (S)
             </button>
 
+            {/* Compact More menu on narrow screens (< 640px) */}
+            <button
+              type="button"
+              onClick={() => setMoreOpen((o) => !o)}
+              aria-expanded={moreOpen}
+              aria-label="More bench actions"
+              className="inline-flex h-8 items-center rounded-full px-2.5 text-xs font-semibold shadow-lg backdrop-blur sm:hidden"
+              style={{
+                backgroundColor: 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: 'var(--vml-text)',
+              }}
+            >
+              More
+            </button>
+
+            {moreOpen && (
+              <div
+                className="absolute top-9 right-0 z-30 flex w-40 flex-col gap-1 rounded-xl p-1.5 shadow-xl sm:hidden"
+                style={{
+                  backgroundColor: 'var(--vml-tooltip-bg)',
+                  border: '1px solid var(--vml-tooltip-border)',
+                  color: 'var(--vml-tooltip-text)',
+                }}
+              >
+                {validationResult && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      openLastResult();
+                    }}
+                    className="rounded-lg px-2.5 py-1.5 text-left text-xs font-medium hover:opacity-80"
+                  >
+                    Last result
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    toggleTerminalLabels();
+                  }}
+                  className="rounded-lg px-2.5 py-1.5 text-left text-xs font-medium hover:opacity-80"
+                >
+                  Labels (L): {showTerminalLabels ? 'On' : 'Off'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setConfirmAction('reset');
+                  }}
+                  className="rounded-lg px-2.5 py-1.5 text-left text-xs font-medium text-red-400 hover:opacity-80"
+                >
+                  Reset bench
+                </button>
+              </div>
+            )}
+
             <div
-              className="hidden rounded-full px-3 py-1.5 text-xs shadow-lg backdrop-blur xl:block"
+              className="hidden h-8 items-center rounded-full px-2.5 text-xs shadow-lg backdrop-blur 2xl:inline-flex"
               style={{
                 backgroundColor: 'var(--vml-panel)',
                 border: '1px solid var(--vml-border)',

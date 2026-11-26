@@ -2,6 +2,7 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
 
 export interface UiThemeTokens {
+  pageBg: string;
   panel: string;
   panelHover: string;
   text: string;
@@ -57,7 +58,8 @@ export const TERMINAL_SELECTED_COLOR = '#0284c7';
 export const THEME_TOKENS: Record<ResolvedTheme, ThemeTokens> = {
   dark: {
     ui: {
-      panel: 'rgba(15, 23, 42, 0.88)',
+      pageBg: '#0f172a',
+      panel: 'rgba(15, 23, 42, 0.92)',
       panelHover: '#1e293b',
       text: '#f8fafc',
       textMuted: '#cbd5e1',
@@ -88,7 +90,8 @@ export const THEME_TOKENS: Record<ResolvedTheme, ThemeTokens> = {
   },
   light: {
     ui: {
-      panel: 'rgba(255, 255, 255, 0.9)',
+      pageBg: '#f1f5f9',
+      panel: 'rgba(255, 255, 255, 0.92)',
       panelHover: '#e2e8f0',
       text: '#0f172a',
       textMuted: '#334155',

@@ -126,12 +126,12 @@ export function ResultModal({ experiment, onRequestReset }: ResultModalProps) {
       ) : confirmingSolution ? (
         <div className="space-y-4">
           <h2 id="result-modal-title" className="text-base font-bold">
-            Show canonical wiring solution?
+            Show wiring solution?
           </h2>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--vml-text-muted)' }}>
-            This overlays Netlist A as ghost wires on the bench and records that
-            you used the solution for this experiment run. Your current wires
-            will stay intact until you choose Apply to bench.
+            This shows the solution wires on the bench and records that you used
+            the solution for this run. Your current wires stay intact unless you
+            choose Apply to bench.
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             <button
