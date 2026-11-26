@@ -14,6 +14,7 @@ interface TerminalProps {
   componentId: string;
   componentLabel: string;
   terminal: TerminalDef;
+  displayLabel?: string;
 }
 
 const UNIFORM_TERMINAL_COLOR = '#334155';
@@ -22,6 +23,7 @@ export function Terminal({
   componentId,
   componentLabel,
   terminal,
+  displayLabel,
 }: TerminalProps) {
   const fullId: TerminalId = `${componentId}.${terminal.name}`;
   const [hovered, setHovered] = useState(false);
@@ -33,20 +35,27 @@ export function Terminal({
   const experimentId = useSessionStore((s) => s.experimentId);
   const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
   const mode = useSessionStore((s) => s.mode);
+  const activeProbeLead = useSessionStore((s) => s.activeProbeLead);
+  const placeProbeLead = useSessionStore((s) => s.placeProbeLead);
   const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
   const highlightedNetPinned = useSessionStore((s) => s.highlightedNetPinned);
   const setHighlightedNetIndex = useSessionStore((s) => s.setHighlightedNetIndex);
   const clearHighlightedNet = useSessionStore((s) => s.clearHighlightedNet);
   const resolvedTheme = useThemeStore((s) => s.resolved);
   const supplyOn = useControlsStore((s) => s.supplyOn);
+  const controlValues = useControlsStore((s) => s.values);
 
   const isLearnMode = mode === 'learn';
   const isObserveMode = mode === 'observe';
   const isSelected = !isLearnMode && !isObserveMode && selectedTerminal === fullId;
+  const isProbeA = controlValues['probe.a'] === fullId;
+  const isProbeB = controlValues['probe.b'] === fullId;
   const ringColor = UNIFORM_TERMINAL_COLOR;
   const highlightColor = resolvedTheme === 'dark' ? '#38bdf8' : '#0284c7';
 
   const currentStage = getStage(getExperiment(experimentId), currentStageIndex);
+  const isProbeClickActive = Boolean(currentStage.probeEnabled && activeProbeLead && !isLearnMode);
+  const shownLabel = displayLabel ?? terminal.name;
   const observeNetInfo = isObserveMode
     ? findStageTerminalNetInfo(currentStage, fullId)
     : null;
@@ -69,6 +78,10 @@ export function Terminal({
         onClick={(e) => {
           e.stopPropagation();
           if (isLearnMode) return;
+          if (isProbeClickActive && activeProbeLead) {
+            placeProbeLead(activeProbeLead, fullId);
+            return;
+          }
           clickTerminal(fullId, supplyOn);
         }}
         onPointerOver={(e) => {
@@ -78,8 +91,11 @@ export function Terminal({
           if (isObserveMode && observeNetInfo && !highlightedNetPinned) {
             setHighlightedNetIndex(observeNetInfo.netIndex, false);
           }
-          document.body.style.cursor =
-            isLearnMode || isObserveMode ? 'default' : 'pointer';
+          document.body.style.cursor = isProbeClickActive
+            ? 'crosshair'
+            : isLearnMode || isObserveMode
+              ? 'default'
+              : 'pointer';
         }}
         onPointerOut={(e) => {
           e.stopPropagation();
@@ -100,25 +116,41 @@ export function Terminal({
         <cylinderGeometry args={[0.046, 0.052, 0.04, 18]} />
         <meshStandardMaterial
           color={
-            isNetHighlighted
-              ? highlightColor
-              : isSelected
-                ? TERMINAL_SELECTED_COLOR
-                : hovered
-                  ? '#f59e0b'
-                  : ringColor
+            isProbeA
+              ? '#ef4444'
+              : isProbeB
+                ? '#38bdf8'
+                : isNetHighlighted
+                  ? highlightColor
+                  : isSelected
+                    ? TERMINAL_SELECTED_COLOR
+                    : hovered
+                      ? '#f59e0b'
+                      : ringColor
           }
           emissive={
-            isNetHighlighted
-              ? highlightColor
-              : isSelected
-                ? TERMINAL_SELECTED_COLOR
-                : hovered
-                  ? '#b45309'
-                  : '#000000'
+            isProbeA
+              ? '#ef4444'
+              : isProbeB
+                ? '#38bdf8'
+                : isNetHighlighted
+                  ? highlightColor
+                  : isSelected
+                    ? TERMINAL_SELECTED_COLOR
+                    : hovered
+                      ? '#b45309'
+                      : '#000000'
           }
           emissiveIntensity={
-            isNetHighlighted ? 0.8 : isSelected ? 0.7 : hovered ? 0.45 : 0
+            isProbeA || isProbeB
+              ? 0.85
+              : isNetHighlighted
+                ? 0.8
+                : isSelected
+                  ? 0.7
+                  : hovered
+                    ? 0.45
+                    : 0
           }
           transparent={isNetDimmed}
           opacity={isNetDimmed ? 0.28 : 1}
@@ -146,21 +178,21 @@ export function Terminal({
       </mesh>
 
       {/* Optional printed terminal tag directly below post (key L) */}
-      {showTerminalLabels && (
+      {(showTerminalLabels || Boolean(displayLabel && displayLabel !== terminal.name)) && (
         <LabelPlate
-          text={terminal.name}
-          width={0.18}
+          text={shownLabel}
+          width={displayLabel && displayLabel !== terminal.name ? 0.28 : 0.18}
           height={0.085}
-          fontSize={36}
+          fontSize={displayLabel && displayLabel !== terminal.name ? 28 : 36}
           bg="#0f172a"
-          fg="#f8fafc"
-          border="#334155"
+          fg={displayLabel && displayLabel !== terminal.name ? '#fde68a' : '#f8fafc'}
+          border={isProbeA ? '#ef4444' : isProbeB ? '#38bdf8' : '#334155'}
           position={[0, -0.075, 0.012]}
         />
       )}
 
       {/* Hover / selected tooltip */}
-      {(hovered || isSelected) && (
+      {(hovered || isSelected || isProbeA || isProbeB) && (
         <Html position={[0, 0.14, 0.06]} center distanceFactor={8}>
           <div
             className="pointer-events-none whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium shadow-lg"
@@ -174,7 +206,17 @@ export function Terminal({
               {componentLabel}
             </span>
             <span className="mx-1 opacity-50">·</span>
-            <span>{terminal.label}</span>
+            <span>{displayLabel ? `${terminal.label} (${displayLabel})` : terminal.label}</span>
+            {isProbeA && (
+              <div className="mt-0.5 text-[10px] font-bold text-rose-400">
+                Red Probe (+) Lead A attached
+              </div>
+            )}
+            {isProbeB && (
+              <div className="mt-0.5 text-[10px] font-bold text-sky-400">
+                Black Probe (-) Lead B attached
+              </div>
+            )}
             {isObserveMode && (
               <div
                 className="mt-0.5 text-[10px] font-medium"

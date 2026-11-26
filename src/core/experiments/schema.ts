@@ -26,10 +26,14 @@ const FaultPatternSchema = z.object({
 
 const ComponentTypeSchema = z.enum([
   'acSupply',
+  'acSupply3ph',
   'variac1ph',
+  'variac3ph',
   'wattmeter',
   'transformer1ph',
+  'transformer3ph',
   'voltmeter',
+  'probeVoltmeter',
   'ammeter',
   'lampLoad',
   'rheostat',
@@ -263,7 +267,7 @@ const StageDefSchema = z.object({
     .optional(),
   cameraPresets: z.array(CameraPresetDefSchema).min(1).optional(),
   acceptedNetlists: z
-    .array(z.array(z.array(z.string().min(1)).min(2)).min(1))
+    .array(z.array(z.array(z.string().min(1)).min(2)))
     .min(1),
   netLabels: z.array(z.string()).optional(),
   netCategories: z.array(z.string()).optional(),
@@ -291,6 +295,8 @@ const StageDefSchema = z.object({
   hints: z.array(z.string().min(1)).optional(),
   solutionNote: z.string().min(1).optional(),
   carryOver: z.enum(['none', 'consistent-wires']).optional(),
+  probeEnabled: z.boolean().optional(),
+  identificationMode: z.enum(['winding-pairs', 'phase-groups']).optional(),
 });
 
 export const ExperimentDefSchema = z
@@ -304,6 +310,7 @@ export const ExperimentDefSchema = z
     charts: z.array(ChartSpecSchema).optional(),
     hints: z.array(z.string().min(1)),
     solutionNote: z.string().min(1),
+    phasorReport: z.boolean().optional(),
   })
   .superRefine((exp, ctx) => {
     const compIds = new Set(exp.components.map((c) => c.id));

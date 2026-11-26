@@ -1,6 +1,8 @@
 import {
   evaluateExperimentPhysics,
   findMeterReading,
+  getSupplySwitchId,
+  isSupplySwitchOn,
   toControlValues,
 } from '../physics/evaluate';
 import { DEFAULT_METER_GAINS } from '../physics/meters';
@@ -58,7 +60,7 @@ export function evaluateLearnStepCondition(
   }
 
   const vals = toControlValues(controls);
-  const supplyOn = Boolean(vals['sup.switch']);
+  const supplyOn = isSupplySwitchOn(vals);
   const meterId = cond.meterId ?? 'vp';
   const vPrimary = readMeterShown(output, meterId);
 
@@ -172,7 +174,7 @@ export function findVariacForTargetV1(
       wires,
       {
         ...base,
-        'sup.switch': true,
+        [getSupplySwitchId(base)]: true,
         [knobId]: variacV,
         ...(loadId in base ? { [loadId]: lamps } : {}),
       },

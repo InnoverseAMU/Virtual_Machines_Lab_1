@@ -31,10 +31,28 @@ export interface ExperimentEvaluation<
  * Normalizes either legacy TransformerLoadControls or generic ControlValues
  * into a flat ControlValues map keyed by control id.
  */
+export function getSupplySwitchId(
+  controls: ControlValues | Record<string, unknown>,
+): string {
+  if ('sup3.switch' in controls) return 'sup3.switch';
+  return 'sup.switch';
+}
+
+export function isSupplySwitchOn(
+  controls: ControlValues | TransformerLoadControls,
+): boolean {
+  const vals = toControlValues(controls);
+  return Boolean(vals['sup.switch'] ?? vals['sup3.switch']);
+}
+
 export function toControlValues(
   controls: ControlValues | TransformerLoadControls,
 ): ControlValues {
-  if ('supplyOn' in controls && !('sup.switch' in controls)) {
+  if (
+    'supplyOn' in controls &&
+    !('sup.switch' in controls) &&
+    !('sup3.switch' in controls)
+  ) {
     const legacy = controls as TransformerLoadControls;
     return {
       'sup.switch': legacy.supplyOn,

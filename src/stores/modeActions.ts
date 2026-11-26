@@ -1,6 +1,8 @@
 import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
 import { getStage, getStageComponents } from '../core/circuit/stages';
 import { getExperiment } from '../core/experiments/registry';
+import { canonicalPairKey, getScrambledTerminalMap } from '../core/phasor/ex3_5Scramble';
+import type { TerminalId } from '../core/types';
 import { useControlsStore } from './controlsStore';
 import {
   createSessionSeed,
@@ -24,6 +26,7 @@ export function enterLabMode(experimentId: string, targetMode: LabMode): void {
     .filter(
       (c) =>
         c.type === 'voltmeter' ||
+        c.type === 'probeVoltmeter' ||
         c.type === 'ammeter' ||
         c.type === 'wattmeter',
     )
@@ -53,6 +56,21 @@ export function enterLabMode(experimentId: string, targetMode: LabMode): void {
       stageComponents,
     );
     wiring.setObserveWires(pairs);
+    if (stage.physicsModel === 'phasor-connections') {
+      const map = getScrambledTerminalMap(seed);
+      const truePairs = map.halfWindings.map(
+        (hw) => [hw.posTerminal, hw.negTerminal] as [TerminalId, TerminalId],
+      );
+      useSessionStore.getState().setIdentifiedPairs(truePairs);
+      if (experiment.stages.length > 0 && stage.id !== 'identify-pairs') {
+        const groups = (['a', 'b', 'c'] as const).map((ph) =>
+          map.halfWindings
+            .filter((hw) => hw.phase === ph)
+            .map((hw) => canonicalPairKey(hw.posTerminal, hw.negTerminal)),
+        );
+        useSessionStore.getState().setIdentifiedPhases(groups);
+      }
+    }
   }
 
   session.goToScreen('lab');

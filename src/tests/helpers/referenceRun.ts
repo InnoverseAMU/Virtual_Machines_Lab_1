@@ -1,6 +1,10 @@
 import { findVariacForTargetV1 } from '../../core/circuit/learn';
 import { collectInternalLinks, wiresFromNetlist } from '../../core/circuit/nets';
 import { getStage, getStageComponents } from '../../core/circuit/stages';
+import {
+  getCanonicalStageNetsForSeed,
+  getScrambledTerminalMap,
+} from '../../core/phasor/ex3_5Scramble';
 import { evaluateExperimentPhysics } from '../../core/physics/evaluate';
 import { drawSessionMeterGains } from '../../core/physics/meters';
 import {
@@ -495,6 +499,72 @@ const DEFAULT_PROCEDURES: Record<
       };
     },
   },
+  'ex3.5': {
+    runStage: ({ experiment, stageIndex, seed, gains }) => {
+      const stage = getStage(experiment, stageIndex);
+      const t = getScrambledTerminalMap(seed).trueToTerminal;
+      const wires =
+        stage.id === 'identify-pairs'
+          ? []
+          : wiresFromNetlist(getCanonicalStageNetsForSeed(stage.id, seed), []);
+
+      const probePairs: Record<string, [string, string]> = {
+        'identify-pairs': [t.a1, t.a2],
+        'identify-phases': [t.a1, t.a4],
+        star: [t.a4, t.b4],
+        delta: [t.b4, t.c4],
+        zigzag: [t.b3, t.c3],
+      };
+      const [probeA, probeB] = probePairs[stage.id] ?? [t.a1, t.a2];
+
+      const controls: ControlValues = {
+        'sup3.switch': true,
+        'va3.knob': 230,
+        'probe.a': probeA,
+        'probe.b': probeB,
+      };
+      const { output } = evaluateExperimentPhysics(
+        experiment,
+        wires,
+        controls,
+        gains,
+        { stageIndex, seed },
+      );
+      return [captureObservationRow(stage, output, controls, 1, `p35_${stage.id}_1`)];
+    },
+    computeAnswers: (rowsByStage) => {
+      const phaseRows = rowsByStage['identify-phases'] ?? [];
+      const vp =
+        phaseRows.length > 0 ? getRowNumber(phaseRows[0], 'probeV') : 115;
+
+      const starRows = rowsByStage['star'] ?? [];
+      const deltaRows = rowsByStage['delta'] ?? [];
+      const zzRows = rowsByStage['zigzag'] ?? [];
+
+      const starLineV =
+        starRows.length > 0 ? getRowNumber(starRows[0], 'starLineV') : vp * Math.sqrt(3);
+      const deltaLineV =
+        deltaRows.length > 0 ? getRowNumber(deltaRows[0], 'deltaLineV') : vp;
+      const zigzagPhaseV =
+        zzRows.length > 0
+          ? getRowNumber(zzRows[0], 'zigzagPhaseV')
+          : (vp * Math.sqrt(3)) / 2;
+      const zigzagLineV =
+        zzRows.length > 0 ? getRowNumber(zzRows[0], 'zigzagLineV') : vp * 1.5;
+
+      return {
+        starLineV,
+        deltaLineV,
+        zigzagPhaseV,
+        zigzagLineV,
+        highestLineConn: 'star',
+        sampleDiffPhasesLow: 50,
+        sampleDiffPhasesHigh: 86.6,
+        sampleSamePhaseLow: 0,
+        sampleSamePhaseHigh: 100,
+      };
+    },
+  },
 };
 
 /**
@@ -518,6 +588,7 @@ export function referenceRun(
         .filter(
           (c) =>
             c.type === 'voltmeter' ||
+            c.type === 'probeVoltmeter' ||
             c.type === 'ammeter' ||
             c.type === 'wattmeter',
         )

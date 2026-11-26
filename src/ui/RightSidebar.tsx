@@ -1,5 +1,10 @@
 import { memo, useRef, useState } from 'react';
 import { getStage } from '../core/circuit/stages';
+import {
+  canonicalPairKey,
+  resolveScrambledTerminalLabels,
+} from '../core/phasor/ex3_5Scramble';
+import { isSupplySwitchOn } from '../core/physics/evaluate';
 import { describeWattmeterCcLinkMode } from '../core/physics/meters';
 import { MAX_OBSERVATION_ROWS } from '../core/physics/report';
 import type {
@@ -109,7 +114,7 @@ const ControlsSection = memo(function ControlsSection({
         {controls.map((ctrl) => {
           if (ctrl.kind === 'switch') {
             const isOn = Boolean(values[ctrl.id]);
-            const isSupply = ctrl.id === 'sup.switch';
+            const isSupply = ctrl.id === 'sup.switch' || ctrl.id === 'sup3.switch';
             return (
               <div key={ctrl.id} className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
@@ -586,7 +591,17 @@ export function RightSidebar({
 
   const values = useControlsStore((s) => s.values);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
-  const supplyOn = Boolean(values['sup.switch']);
+  const supplyOn = isSupplySwitchOn(values);
+  const sessionSeed = useSessionStore((s) => s.sessionSeed);
+  const activeProbeLead = useSessionStore((s) => s.activeProbeLead);
+  const setActiveProbeLead = useSessionStore((s) => s.setActiveProbeLead);
+  const clearProbeLeads = useSessionStore((s) => s.clearProbeLeads);
+  const identifiedPairs = useSessionStore((s) => s.identifiedPairs);
+  const addIdentifiedPair = useSessionStore((s) => s.addIdentifiedPair);
+  const removeIdentifiedPair = useSessionStore((s) => s.removeIdentifiedPair);
+  const identifiedPhases = useSessionStore((s) => s.identifiedPhases);
+  const setIdentifiedPhases = useSessionStore((s) => s.setIdentifiedPhases);
+  const [phaseAssign, setPhaseAssign] = useState<Record<string, 'a' | 'b' | 'c'>>({});
   const variacCtrl = controls.find((c) => c.kind === 'knob');
   const variacV = variacCtrl ? Number(values[variacCtrl.id] ?? 0) : 0;
 
@@ -786,6 +801,236 @@ export function RightSidebar({
     </section>
   ) : null;
 
+  const probeA = String(values['probe.a'] ?? '');
+  const probeB = String(values['probe.b'] ?? '');
+  const probeReading = output.meters.find((m) => m.id === 'probe');
+  const resolvedLabels = resolveScrambledTerminalLabels(
+    sessionSeed,
+    identifiedPairs,
+    identifiedPhases.length === 3,
+  );
+  const shortTerm = (id: string) =>
+    id ? (resolvedLabels[id] ?? id.replace(/^tx\./, '')) : '--';
+
+  const probeSection = stage.probeEnabled ? (
+    <section
+      className="space-y-2 rounded-xl p-2.5"
+      style={{
+        backgroundColor: 'var(--vml-panel-hover)',
+        border: '1px solid var(--vml-border)',
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold">Probe Voltmeter Leads</span>
+        <span
+          className="font-mono text-xs font-bold"
+          style={{ color: 'var(--vml-accent)' }}
+        >
+          {(probeReading?.shownValue ?? 0).toFixed(1)} V
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-1">
+        <button
+          type="button"
+          onClick={() => setActiveProbeLead(null)}
+          className="rounded-md px-1.5 py-1 text-[11px] font-semibold transition"
+          style={{
+            backgroundColor:
+              activeProbeLead === null ? 'var(--vml-accent)' : 'var(--vml-panel)',
+            color:
+              activeProbeLead === null
+                ? 'var(--vml-accent-text)'
+                : 'var(--vml-text)',
+            border: '1px solid var(--vml-border)',
+          }}
+        >
+          Wire Mode
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveProbeLead(activeProbeLead === 'a' ? null : 'a')}
+          className="rounded-md px-1.5 py-1 text-[11px] font-semibold transition"
+          style={{
+            backgroundColor:
+              activeProbeLead === 'a' ? '#ef4444' : 'var(--vml-panel)',
+            color: activeProbeLead === 'a' ? '#ffffff' : '#fca5a5',
+            border: '1px solid var(--vml-border)',
+          }}
+        >
+          + {shortTerm(probeA)}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveProbeLead(activeProbeLead === 'b' ? null : 'b')}
+          className="rounded-md px-1.5 py-1 text-[11px] font-semibold transition"
+          style={{
+            backgroundColor:
+              activeProbeLead === 'b' ? '#0284c7' : 'var(--vml-panel)',
+            color: activeProbeLead === 'b' ? '#ffffff' : '#7dd3fc',
+            border: '1px solid var(--vml-border)',
+          }}
+        >
+          - {shortTerm(probeB)}
+        </button>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px]" style={{ color: 'var(--vml-text-muted)' }}>
+          {activeProbeLead
+            ? `Click any secondary terminal in 3D to clip ${activeProbeLead === 'a' ? 'Red (+)' : 'Black (-)'} lead.`
+            : 'Select + or - lead to probe terminals without disconnecting wires.'}
+        </p>
+        {(probeA || probeB) && (
+          <button
+            type="button"
+            onClick={clearProbeLeads}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+            style={{
+              backgroundColor: 'var(--vml-panel)',
+              border: '1px solid var(--vml-border)',
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    </section>
+  ) : null;
+
+  const assignPairPhase = (pairKey: string, phase: 'a' | 'b' | 'c') => {
+    const next = { ...phaseAssign, [pairKey]: phase };
+    setPhaseAssign(next);
+    const groups: string[][] = (['a', 'b', 'c'] as const).map((ph) =>
+      identifiedPairs
+        .map((p) => canonicalPairKey(p[0], p[1]))
+        .filter((k) => next[k] === ph),
+    );
+    setIdentifiedPhases(groups);
+  };
+
+  const identificationSection = stage.identificationMode ? (
+    <section
+      className="space-y-2 rounded-xl p-2.5"
+      style={{
+        backgroundColor: 'var(--vml-panel-hover)',
+        border: '1px solid var(--vml-border)',
+      }}
+    >
+      {stage.identificationMode === 'winding-pairs' && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold">Winding Pairs (W1–W6)</span>
+            <span className="text-[11px] font-semibold text-emerald-400">
+              {identifiedPairs.length} / 6
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={!probeA || !probeB || probeA === probeB || identifiedPairs.length >= 6}
+            onClick={() => addIdentifiedPair(probeA, probeB)}
+            className="w-full rounded-lg px-2.5 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-45"
+            style={{
+              backgroundColor: 'var(--vml-accent)',
+              color: 'var(--vml-accent-text)',
+            }}
+          >
+            Pair probed terminals ({shortTerm(probeA)} · {shortTerm(probeB)})
+          </button>
+          {identifiedPairs.length > 0 && (
+            <div className="space-y-1">
+              {identifiedPairs.map(([a, b], idx) => (
+                <div
+                  key={canonicalPairKey(a, b)}
+                  className="flex items-center justify-between rounded-md px-2 py-1 text-[11px]"
+                  style={{
+                    backgroundColor: 'var(--vml-panel)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  <span className="font-mono font-semibold">
+                    W{idx + 1}: {a.replace(/^tx\./, '')} ↔ {b.replace(/^tx\./, '')}
+                  </span>
+                  {!isObserveMode && (
+                    <button
+                      type="button"
+                      onClick={() => removeIdentifiedPair(idx)}
+                      className="text-[11px] font-bold text-rose-400 hover:text-rose-300"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {stage.identificationMode === 'phase-groups' && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold">Group Phases (a, b, c)</span>
+            <span className="text-[10px]" style={{ color: 'var(--vml-text-muted)' }}>
+              2 pairs per phase
+            </span>
+          </div>
+          <p className="text-[10px]" style={{ color: 'var(--vml-text-muted)' }}>
+            Connect winding pairs in series on the bench: same-phase halves give 0 V (opposing) or ~115 V (aiding); different phases give ~57.5 V or ~99.6 V.
+          </p>
+          <div className="space-y-1">
+            {identifiedPairs.map(([a, b], idx) => {
+              const key = canonicalPairKey(a, b);
+              const assigned =
+                phaseAssign[key] ??
+                (identifiedPhases[0]?.includes(key)
+                  ? 'a'
+                  : identifiedPhases[1]?.includes(key)
+                    ? 'b'
+                    : identifiedPhases[2]?.includes(key)
+                      ? 'c'
+                      : undefined);
+              return (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-[11px]"
+                  style={{
+                    backgroundColor: 'var(--vml-panel)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  <span className="font-mono">
+                    W{idx + 1} ({a.replace(/^tx\./, '')}–{b.replace(/^tx\./, '')})
+                  </span>
+                  <div className="flex gap-1">
+                    {(['a', 'b', 'c'] as const).map((ph) => (
+                      <button
+                        key={ph}
+                        type="button"
+                        disabled={isObserveMode}
+                        onClick={() => assignPairPhase(key, ph)}
+                        className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                        style={{
+                          backgroundColor:
+                            assigned === ph ? 'var(--vml-accent)' : 'transparent',
+                          color:
+                            assigned === ph
+                              ? 'var(--vml-accent-text)'
+                              : 'var(--vml-text-muted)',
+                          border: '1px solid var(--vml-border)',
+                        }}
+                      >
+                        {ph}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </section>
+  ) : null;
+
   const benchTabBody = (
     <div className="space-y-4">
       <ControlsSection
@@ -793,6 +1038,8 @@ export function RightSidebar({
         controlsLocked={controlsLocked}
         unlockHint={unlockHint}
       />
+      {probeSection}
+      {identificationSection}
       <div style={{ borderTop: '1px solid var(--vml-border)' }} className="pt-3.5">
         <ReadingsSection
           meters={output.meters}

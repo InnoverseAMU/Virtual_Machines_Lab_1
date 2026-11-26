@@ -1,3 +1,4 @@
+import { isSupplySwitchOn } from '../physics/evaluate';
 import type {
   BaseConnectionState,
   ComponentInstance,
@@ -120,7 +121,7 @@ export function computeWireCurrentFlows(
 ): Map<string, WireFlowInfo> {
   const flows = new Map<string, WireFlowInfo>();
 
-  const supplyOn = Boolean(controls['sup.switch']);
+  const supplyOn = isSupplySwitchOn(controls);
   const anyKnobOn = Object.entries(controls).some(
     ([k, v]) => k.endsWith('.knob') && Number(v) > 0,
   );

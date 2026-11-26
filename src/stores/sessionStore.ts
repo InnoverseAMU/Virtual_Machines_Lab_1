@@ -1,5 +1,8 @@
 import { create } from 'zustand';
-import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
+import {
+  collectInternalLinks,
+  wiresFromNetlist,
+} from '../core/circuit/nets';
 import {
   applyStageCarryOver,
   getAllLearnSteps,
@@ -9,7 +12,11 @@ import {
 import { validateWiring } from '../core/circuit/validate';
 import type { AssetFile } from '../core/experiments/assets';
 import { EXPERIMENTS, getExperiment } from '../core/experiments/registry';
-import { toControlValues } from '../core/physics/evaluate';
+import {
+  canonicalPairKey,
+  getScrambledTerminalMap,
+} from '../core/phasor/ex3_5Scramble';
+import { isSupplySwitchOn, toControlValues } from '../core/physics/evaluate';
 import {
   captureObservationRow,
   checkRunAnswers,
@@ -23,6 +30,7 @@ import type {
   PhysicsSolveOutput,
   RunCheckResult,
   RuntimeEvent,
+  TerminalId,
   TransformerLoadControls,
   TransformerLoadOutput,
   ValidationResult,
@@ -196,6 +204,11 @@ interface SessionState {
   highlightedNetIndex: number | null;
   highlightedNetPinned: boolean;
 
+  // Probe voltmeter & terminal identification state
+  activeProbeLead: 'a' | 'b' | null;
+  identifiedPairs: [TerminalId, TerminalId][];
+  identifiedPhases: string[][];
+
   // Learn mode per-run state (never persisted mid-lesson)
   learnStepIndex: number;
   learnNoLoadAck: boolean;
@@ -257,6 +270,14 @@ interface SessionState {
   setHighlightedNetIndex: (index: number | null, pinned?: boolean) => void;
   clearHighlightedNet: () => void;
 
+  setActiveProbeLead: (lead: 'a' | 'b' | null) => void;
+  placeProbeLead: (lead: 'a' | 'b', terminalId: TerminalId) => void;
+  clearProbeLeads: () => void;
+  addIdentifiedPair: (a: TerminalId, b: TerminalId) => void;
+  removeIdentifiedPair: (index: number) => void;
+  setIdentifiedPairs: (pairs: [TerminalId, TerminalId][]) => void;
+  setIdentifiedPhases: (groups: string[][]) => void;
+
   setLearnStepIndex: (index: number) => void;
   ackLearnReading: () => void;
   resetLearnAck: () => void;
@@ -280,6 +301,7 @@ function getStageMeterIds(experimentId: string, stageIndex: number): string[] {
       .filter(
         (c) =>
           c.type === 'voltmeter' ||
+          c.type === 'probeVoltmeter' ||
           c.type === 'ammeter' ||
           c.type === 'wattmeter',
       )
@@ -321,6 +343,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   highlightedNetIndex: null,
   highlightedNetPinned: false,
+
+  activeProbeLead: null,
+  identifiedPairs: [],
+  identifiedPhases: [],
 
   learnStepIndex: 0,
   learnNoLoadAck: false,
@@ -365,6 +391,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       runCheckResult: null,
       highlightedNetIndex: null,
       highlightedNetPinned: false,
+      activeProbeLead: null,
+      identifiedPairs: [],
+      identifiedPhases: [],
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -410,11 +439,32 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       stageComps,
     );
     useWiringStore.getState().setObserveWires(pairs);
+
+    let nextIdentifiedPairs = get().identifiedPairs;
+    let nextIdentifiedPhases = get().identifiedPhases;
+    if (stage.physicsModel === 'phasor-connections') {
+      const map = getScrambledTerminalMap(OBSERVE_FIXED_SEED);
+      nextIdentifiedPairs = map.halfWindings.map(
+        (hw) => [hw.posTerminal, hw.negTerminal] as [TerminalId, TerminalId],
+      );
+      nextIdentifiedPhases =
+        clamped >= 1
+          ? (['a', 'b', 'c'] as const).map((ph) =>
+              map.halfWindings
+                .filter((hw) => hw.phase === ph)
+                .map((hw) => canonicalPairKey(hw.posTerminal, hw.negTerminal)),
+            )
+          : [];
+    }
+
     set({
       currentStageIndex: clamped,
       observationRows: observationRowsByStage[stage.id] ?? [],
       highlightedNetIndex: null,
       highlightedNetPinned: false,
+      activeProbeLead: null,
+      identifiedPairs: nextIdentifiedPairs,
+      identifiedPhases: nextIdentifiedPhases,
       cameraPreset: 'overview',
       toasts: [],
     });
@@ -542,6 +592,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const {
       experimentId,
       currentStageIndex,
+      sessionSeed,
+      identifiedPairs,
+      identifiedPhases,
       attempts,
       completedExperiments,
       completedStages,
@@ -559,6 +612,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       wires,
       currentStageIndex,
       controlValues,
+      {
+        seed: sessionSeed,
+        identification: {
+          pairs: identifiedPairs,
+          phaseGroups: identifiedPhases,
+        },
+      },
     );
 
     const nextAttempts = {
@@ -658,7 +718,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       pushToast,
     } = get();
     const controlValues = toControlValues(controls);
-    const supplyOn = Boolean(controlValues['sup.switch']);
+    const supplyOn = isSupplySwitchOn(controlValues);
     if (!supplyOn || !energised) return;
 
     const experiment = getExperiment(experimentId);
@@ -847,6 +907,51 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       highlightedNetPinned: false,
     }),
 
+  setActiveProbeLead: (activeProbeLead) => set({ activeProbeLead }),
+
+  placeProbeLead: (lead, terminalId) => {
+    const key = lead === 'a' ? 'probe.a' : 'probe.b';
+    const otherKey = lead === 'a' ? 'probe.b' : 'probe.a';
+    const ctrlStore = useControlsStore.getState();
+    ctrlStore.setControlValue(key, terminalId);
+    const otherVal = String(ctrlStore.values[otherKey] ?? '');
+    if (lead === 'a' && !otherVal) {
+      set({ activeProbeLead: 'b' });
+    }
+  },
+
+  clearProbeLeads: () => {
+    const ctrlStore = useControlsStore.getState();
+    ctrlStore.setControlValue('probe.a', '');
+    ctrlStore.setControlValue('probe.b', '');
+    set({ activeProbeLead: null });
+  },
+
+  addIdentifiedPair: (a, b) =>
+    set((state) => {
+      if (a === b) return state;
+      const key = canonicalPairKey(a, b);
+      const exists = state.identifiedPairs.some(
+        (p) => canonicalPairKey(p[0], p[1]) === key,
+      );
+      if (exists || state.identifiedPairs.length >= 6) return state;
+      const used = new Set(state.identifiedPairs.flat());
+      if (used.has(a) || used.has(b)) return state;
+      return {
+        identifiedPairs: [...state.identifiedPairs, [a, b]],
+      };
+    }),
+
+  removeIdentifiedPair: (index) =>
+    set((state) => ({
+      identifiedPairs: state.identifiedPairs.filter((_, i) => i !== index),
+      identifiedPhases: [],
+    })),
+
+  setIdentifiedPairs: (identifiedPairs) => set({ identifiedPairs }),
+
+  setIdentifiedPhases: (identifiedPhases) => set({ identifiedPhases }),
+
   setLearnStepIndex: (learnStepIndex) => set({ learnStepIndex }),
 
   ackLearnReading: () => set({ learnNoLoadAck: true }),
@@ -887,7 +992,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   resetLearnRun: () =>
     set({
       currentStageIndex: 0,
-  wiresByStage: {},
+      wiresByStage: {},
+      activeProbeLead: null,
+      identifiedPairs: [],
+      identifiedPhases: [],
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -926,6 +1034,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       runCheckResult: null,
       highlightedNetIndex: null,
       highlightedNetPinned: false,
+      activeProbeLead: null,
+      identifiedPairs: [],
+      identifiedPhases: [],
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,

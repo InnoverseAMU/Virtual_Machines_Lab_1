@@ -81,9 +81,17 @@ function syncLegacyFromValues(
   'supplyOn' | 'variacV' | 'wmVRange' | 'wmIRange' | 'lamps' | 'lampStates'
 > {
   const supplyOn =
-    'sup.switch' in values ? Boolean(values['sup.switch']) : prevState.supplyOn;
+    'sup3.switch' in values
+      ? Boolean(values['sup3.switch'])
+      : 'sup.switch' in values
+        ? Boolean(values['sup.switch'])
+        : prevState.supplyOn;
   const variacV =
-    'va.knob' in values ? Number(values['va.knob']) : prevState.variacV;
+    'va3.knob' in values
+      ? Number(values['va3.knob'])
+      : 'va.knob' in values
+        ? Number(values['va.knob'])
+        : prevState.variacV;
   const rawV = Number(values['wm.vRange'] ?? prevState.wmVRange);
   const wmVRange: 150 | 300 = rawV === 150 ? 150 : 300;
   const rawI = Number(values['wm.iRange'] ?? prevState.wmIRange);
@@ -118,7 +126,7 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
 
   setControlValue: (id, value) => {
     const state = get();
-    if (id === 'sup.switch' && value === true) {
+    if ((id === 'sup.switch' || id === 'sup3.switch') && value === true) {
       const knobEntries = Object.entries(state.values).filter(([k]) =>
         k.endsWith('.knob'),
       );
@@ -162,7 +170,8 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
   },
 
   setSupplyOn: (supplyOn) => {
-    get().setControlValue('sup.switch', supplyOn);
+    const swId = 'sup3.switch' in get().values ? 'sup3.switch' : 'sup.switch';
+    get().setControlValue(swId, supplyOn);
   },
 
   toggleSupply: () => {
@@ -171,11 +180,14 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
   },
 
   tripMcb: () =>
-    set((state) => ({
-      supplyOn: false,
-      mcbTripped: true,
-      values: { ...state.values, 'sup.switch': false },
-    })),
+    set((state) => {
+      const swId = 'sup3.switch' in state.values ? 'sup3.switch' : 'sup.switch';
+      return {
+        supplyOn: false,
+        mcbTripped: true,
+        values: { ...state.values, [swId]: false },
+      };
+    }),
 
   clearMcbTrip: () => set({ mcbTripped: false }),
 
@@ -262,8 +274,8 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
       values[ctrl.id] = ctrl.defaultValue;
     }
 
-    const sw = controls.find((c) => c.id === 'sup.switch');
-    const knob = controls.find((c) => c.id === 'va.knob');
+    const sw = controls.find((c) => c.id === 'sup.switch' || c.id === 'sup3.switch');
+    const knob = controls.find((c) => c.id === 'va.knob' || c.id === 'va3.knob');
     const vSel = controls.find((c) => c.id === 'wm.vRange');
     const iSel = controls.find((c) => c.id === 'wm.iRange');
     const steps = controls.find((c) => c.kind === 'steps');

@@ -14,7 +14,12 @@ import {
   getExperimentAssets,
 } from './core/experiments/assets';
 import { getExperiment } from './core/experiments/registry';
-import { evaluateExperimentPhysics } from './core/physics/evaluate';
+import {
+  evaluateExperimentPhysics,
+  getSupplySwitchId,
+  isSupplySwitchOn,
+} from './core/physics/evaluate';
+import { getPhysicsModel } from './core/physics/registry';
 import { BenchScene } from './scenes/BenchScene';
 import { useControlsStore } from './stores/controlsStore';
 import { enterLabMode } from './stores/modeActions';
@@ -166,9 +171,10 @@ export function App() {
     if (screen !== 'lab' || !isLearn || !currentLearnStep) return;
 
     const targetStageIdx = getStageIndexById(experiment, currentLearnStep.stageId);
+    const activeSwId = getSupplySwitchId(useControlsStore.getState().values);
     if (targetStageIdx !== currentStageIndex) {
       if (useControlsStore.getState().supplyOn) {
-        setControlValue('sup.switch', false);
+        setControlValue(activeSwId, false);
       }
       clearAllWiresScripted();
       setCurrentStageIndex(targetStageIdx);
@@ -176,20 +182,45 @@ export function App() {
 
     setCameraPreset(currentLearnStep.camera);
 
+    const targetStage = getStage(experiment, targetStageIdx);
+    let learnModel: ReturnType<typeof getPhysicsModel> | null = null;
+    try {
+      learnModel = getPhysicsModel(targetStage.physicsModel);
+    } catch {
+      learnModel = null;
+    }
+    const resolved = learnModel?.resolveLearnStep?.(
+      currentLearnStep.id,
+      sessionSeed,
+    );
+
+    if (resolved?.identifiedPairs) {
+      useSessionStore.getState().setIdentifiedPairs(resolved.identifiedPairs);
+    }
+    if (resolved?.identifiedPhases) {
+      useSessionStore.getState().setIdentifiedPhases(resolved.identifiedPhases);
+    }
+    if (resolved?.probeTerminals) {
+      setControlValue('probe.a', resolved.probeTerminals[0]);
+      setControlValue('probe.b', resolved.probeTerminals[1]);
+    }
+
     clearWireTimers();
-    const disconnectPairs = currentLearnStep.disconnectTerminals ?? [];
+    const disconnectPairs =
+      resolved?.disconnectTerminals ?? currentLearnStep.disconnectTerminals ?? [];
     if (disconnectPairs.length > 0) {
       if (useControlsStore.getState().supplyOn) {
-        setControlValue('sup.switch', false);
+        setControlValue(activeSwId, false);
       }
       for (const [a, b] of disconnectPairs) {
         removeTutorialWirePair(a, b);
       }
     }
-    const pairs = currentLearnStep.connectTerminals ?? [];
+    const pairs =
+      resolved?.connectTerminals ?? currentLearnStep.connectTerminals ?? [];
     if (pairs.length > 0) {
       if (useControlsStore.getState().supplyOn) {
-        setControlValue('sup.switch', false);
+        setControlValue(activeSwId, false);
       }
       pairs.forEach(([a, b], idx) => {
         const timer = window.setTimeout(() => {
@@ -228,15 +259,39 @@ export function App() {
       for (let i = 0; i <= upToIndex && i < learnSteps.length; i++) {
         const st = learnSteps[i];
         if (stageId && st.stageId !== stageId) continue;
-        for (const [a, b] of st.disconnectTerminals ?? []) {
+        const stStageIdx = st.stageId
+          ? getStageIndexById(experiment, st.stageId)
+          : currentStageIndex;
+        const stStage = getStage(experiment, stStageIdx);
+        let stModel: ReturnType<typeof getPhysicsModel> | null = null;
+        try {
+          stModel = getPhysicsModel(stStage.physicsModel);
+        } catch {
+          stModel = null;
+        }
+        const resolved = stModel?.resolveLearnStep?.(st.id, sessionSeed);
+        if (resolved?.identifiedPairs) {
+          useSessionStore.getState().setIdentifiedPairs(resolved.identifiedPairs);
+        }
+        if (resolved?.identifiedPhases) {
+          useSessionStore.getState().setIdentifiedPhases(resolved.identifiedPhases);
+        }
+        for (const [a, b] of resolved?.disconnectTerminals ?? st.disconnectTerminals ?? []) {
           removeTutorialWirePair(a, b);
         }
-        for (const [a, b] of st.connectTerminals ?? []) {
+        for (const [a, b] of resolved?.connectTerminals ?? st.connectTerminals ?? []) {
           addTutorialWire(a, b, i);
         }
       }
     },
-    [learnSteps, addTutorialWire, removeTutorialWirePair],
+    [
+      experiment,
+      currentStageIndex,
+      sessionSeed,
+      learnSteps,
+      addTutorialWire,
+      removeTutorialWirePair,
+    ],
   );
 
   const handleLearnBack = useCallback(() => {
@@ -244,16 +299,25 @@ export function App() {
     clearWireTimers();
     const prevIdx = learnStepIndex - 1;
     const prevStep = learnSteps[prevIdx];
+    let curModel: ReturnType<typeof getPhysicsModel> | null = null;
+    try {
+      curModel = getPhysicsModel(currentStage.physicsModel);
+    } catch {
+      curModel = null;
+    }
+    const resolvedCur = currentLearnStep
+      ? curModel?.resolveLearnStep?.(currentLearnStep.id, sessionSeed)
+      : null;
     const leavingWireStep =
-      Boolean(currentLearnStep?.connectTerminals?.length) ||
-      Boolean(currentLearnStep?.disconnectTerminals?.length);
+      Boolean((resolvedCur?.connectTerminals ?? currentLearnStep?.connectTerminals)?.length) ||
+      Boolean((resolvedCur?.disconnectTerminals ?? currentLearnStep?.disconnectTerminals)?.length);
     const crossingPastCondition =
       learnStepIndex >= firstConditionIdx && prevIdx < firstConditionIdx;
     const crossingStage =
       prevStep?.stageId && currentLearnStep?.stageId && prevStep.stageId !== currentLearnStep.stageId;
 
     if (leavingWireStep || crossingPastCondition || crossingStage) {
-      setControlValue('sup.switch', false);
+      setControlValue(getSupplySwitchId(useControlsStore.getState().values), false);
       for (const ctrl of currentStage.controls) {
         if (ctrl.kind === 'knob' || ctrl.kind === 'steps' || ctrl.kind === 'switch') {
           setControlValue(ctrl.id, ctrl.defaultValue);
@@ -301,6 +365,20 @@ export function App() {
 
     clearWireTimers();
     flushLearnStepWires(learnStepIndex, currentLearnStep?.stageId);
+    let curModel: ReturnType<typeof getPhysicsModel> | null = null;
+    try {
+      curModel = getPhysicsModel(currentStage.physicsModel);
+    } catch {
+      curModel = null;
+    }
+    const resolved = curModel?.resolveLearnStep?.(
+      currentLearnStep.id,
+      sessionSeed,
+    );
+    if (resolved?.probeTerminals) {
+      setControlValue('probe.a', resolved.probeTerminals[0]);
+      setControlValue('probe.b', resolved.probeTerminals[1]);
+    }
     const currentWires = useWiringStore.getState().wires;
     const loadId = 'loadControlId' in cond ? (cond.loadControlId ?? 'ld.lamps') : 'ld.lamps';
     const meterId = cond.meterId ?? 'vp';
@@ -326,10 +404,11 @@ export function App() {
       },
     );
 
+    const swId = getSupplySwitchId(useControlsStore.getState().values);
     if (hasLoadCtrl) {
       setControlValue(loadId, targetLamps);
     }
-    setControlValue('sup.switch', true);
+    setControlValue(swId, true);
     setControlValue(controlId, targetKnob);
     if (cond.kind === 'no-load-ack') {
       ackLearnReading();
@@ -352,8 +431,9 @@ export function App() {
     if (learnStepIndex >= learnSteps.length - 1) return;
     if (learnConditionStatus.hasCondition && !learnConditionStatus.met) return;
     clearWireTimers();
+    const swId = getSupplySwitchId(useControlsStore.getState().values);
     if ((currentLearnStep?.connectTerminals?.length ?? 0) > 0) {
-      setControlValue('sup.switch', false);
+      setControlValue(swId, false);
     }
     flushLearnStepWires(learnStepIndex, currentLearnStep?.stageId);
     setLearnStepIndex(learnStepIndex + 1);
@@ -372,8 +452,9 @@ export function App() {
     if (learnStepIndex >= learnSteps.length - 1) return;
     clearWireTimers();
 
+    const swId = getSupplySwitchId(useControlsStore.getState().values);
     if ((currentLearnStep?.connectTerminals?.length ?? 0) > 0) {
-      setControlValue('sup.switch', false);
+      setControlValue(swId, false);
     }
     flushLearnStepWires(learnStepIndex, currentLearnStep?.stageId);
 
@@ -418,7 +499,7 @@ export function App() {
     prevEventIdsRef.current = currentIds;
   }, [screen, evaluation.output, tripMcb, pushToast, dismissToast]);
 
-  const supplyOn = Boolean(controlValues['sup.switch']);
+  const supplyOn = isSupplySwitchOn(controlValues);
   useEffect(() => {
     if (supplyOn && !evaluation.output.mcbTripped) {
       dismissToast('mcb-trip');

@@ -5,6 +5,8 @@ import {
   getStageSolutionNote,
 } from '../core/circuit/stages';
 import { netlistToWirePairs } from '../core/experiments/registry';
+import { getCanonicalStageNetsForSeed } from '../core/phasor/ex3_5Scramble';
+import { isSupplySwitchOn } from '../core/physics/evaluate';
 import type { ExperimentDef } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -16,10 +18,11 @@ interface SolutionBannerProps {
 
 export function SolutionBanner({ experiment }: SolutionBannerProps) {
   const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
+  const sessionSeed = useSessionStore((s) => s.sessionSeed);
   const showingSolution = useSessionStore((s) => s.showingSolution);
   const exitSolutionView = useSessionStore((s) => s.exitSolutionView);
   const values = useControlsStore((s) => s.values);
-  const supplyOn = Boolean(values['sup.switch']);
+  const supplyOn = isSupplySwitchOn(values);
   const setSolutionWires = useWiringStore((s) => s.setSolutionWires);
 
   if (!showingSolution) return null;
@@ -30,9 +33,13 @@ export function SolutionBanner({ experiment }: SolutionBannerProps) {
 
   const applyToBench = () => {
     if (supplyOn) return;
+    const effectiveNetlist =
+      stage.physicsModel === 'phasor-connections'
+        ? getCanonicalStageNetsForSeed(stage.id, sessionSeed)
+        : stage.acceptedNetlists[0];
     setSolutionWires(
       netlistToWirePairs(
-        stage.acceptedNetlists[0],
+        effectiveNetlist,
         collectInternalLinks(stageComponents, values),
       ),
     );
