@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getComponentDef } from '../core/components';
+import { describeWattmeterCcLinkMode } from '../core/physics/meters';
 import type { ComponentInstance, MeterReading } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -46,6 +47,8 @@ export function Wattmeter({
   const activeDivs = reading?.divisions ?? divisions;
   const activePf = reading?.pf ?? pf;
   const mf = reading?.mf ?? (vRange * iRange * activePf) / activeDivs;
+  const ccLink = describeWattmeterCcLinkMode(iRange, iOptions);
+  const mfText = mf < 1 ? mf.toFixed(2) : mf.toFixed(1);
   const readingText = reading?.damaged
     ? 'DAMAGED'
     : `${(reading?.dial ?? 0).toFixed(1)} div`;
@@ -116,16 +119,17 @@ export function Wattmeter({
         )}
         <LabelPlate
           text={`V: ${vRange} V`}
+          subtext="PC Multiplier"
           width={0.34}
           height={0.11}
-          fontSize={34}
+          fontSize={32}
           bg={hoveredSel === 'v' ? '#0284c7' : '#0f172a'}
           border="#64748b"
           rotation={[-Math.PI / 2, 0, 0]}
         />
       </group>
 
-      {/* Clickable Current Range Selector */}
+      {/* Clickable Current Range Selector + Brass Series/Parallel CC Link */}
       <group position={[0.24, 0.33, 0.33]}>
         {hasISelector && iOptions.length > 1 && (
           <mesh
@@ -151,12 +155,40 @@ export function Wattmeter({
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
         )}
+        {/* Physical brass coil-link strap visual */}
+        {ccLink && (
+          <group position={[0, 0.015, -0.085]}>
+            {[-0.08, 0.08].map((px) => (
+              <mesh key={`p1-${px}`} position={[px, 0, -0.02]}>
+                <cylinderGeometry args={[0.013, 0.013, 0.025, 10]} />
+                <meshStandardMaterial color="#d97706" metalness={0.75} roughness={0.3} />
+              </mesh>
+            ))}
+            {ccLink.short === 'SER' ? (
+              <mesh position={[0, 0.008, -0.02]}>
+                <boxGeometry args={[0.17, 0.01, 0.022]} />
+                <meshStandardMaterial color="#fbbf24" metalness={0.8} roughness={0.25} />
+              </mesh>
+            ) : (
+              <>
+                <mesh position={[-0.08, 0.008, -0.02]}>
+                  <boxGeometry args={[0.026, 0.01, 0.05]} />
+                  <meshStandardMaterial color="#fbbf24" metalness={0.8} roughness={0.25} />
+                </mesh>
+                <mesh position={[0.08, 0.008, -0.02]}>
+                  <boxGeometry args={[0.026, 0.01, 0.05]} />
+                  <meshStandardMaterial color="#fbbf24" metalness={0.8} roughness={0.25} />
+                </mesh>
+              </>
+            )}
+          </group>
+        )}
         <LabelPlate
-          text={`I: ${iRange} A`}
-          subtext={`MF=${mf.toFixed(1)}`}
+          text={ccLink ? `I: ${iRange} A (${ccLink.short})` : `I: ${iRange} A`}
+          subtext={`MF=${mfText}`}
           width={0.34}
           height={0.11}
-          fontSize={30}
+          fontSize={28}
           bg={hoveredSel === 'i' ? '#0284c7' : '#0f172a'}
           border="#64748b"
           rotation={[-Math.PI / 2, 0, 0]}

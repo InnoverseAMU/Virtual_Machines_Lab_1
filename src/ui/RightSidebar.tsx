@@ -1,5 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { getStage } from '../core/circuit/stages';
+import { describeWattmeterCcLinkMode } from '../core/physics/meters';
 import { MAX_OBSERVATION_ROWS } from '../core/physics/report';
 import type {
   ControlDef,
@@ -249,12 +250,21 @@ const ControlsSection = memo(function ControlsSection({
 
           if (ctrl.kind === 'selector') {
             const activeVal = values[ctrl.id] ?? ctrl.defaultValue;
+            const isCcRange = ctrl.id.endsWith('.iRange');
+            const isPcRange = ctrl.id.endsWith('.vRange');
+            const numericOpts = ctrl.options.filter(
+              (o): o is number => typeof o === 'number',
+            );
             return (
               <div key={ctrl.id} className="space-y-1">
                 <span className="block text-xs font-medium">{ctrl.label}</span>
                 <div className="grid grid-cols-3 gap-1.5">
                   {ctrl.options.map((opt) => {
                     const active = activeVal === opt;
+                    const ccMode =
+                      isCcRange && typeof opt === 'number'
+                        ? describeWattmeterCcLinkMode(opt, numericOpts)
+                        : null;
                     return (
                       <button
                         key={String(opt)}
@@ -271,12 +281,37 @@ const ControlsSection = memo(function ControlsSection({
                           border: '1px solid var(--vml-border)',
                         }}
                       >
-                        {opt}
-                        {ctrl.unit ? ` ${ctrl.unit}` : ''}
+                        <span>
+                          {opt}
+                          {ctrl.unit ? ` ${ctrl.unit}` : ''}
+                        </span>
+                        {ccMode && (
+                          <span className="block text-[9px] font-medium opacity-80">
+                            {ccMode.label}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
+                {isCcRange && (
+                  <p
+                    className="text-[10px] leading-snug"
+                    style={{ color: 'var(--vml-text-muted)' }}
+                  >
+                    CC link: Series = low I rating · Parallel = double (high) I
+                    rating. Click I plate on 3D wattmeter or here.
+                  </p>
+                )}
+                {isPcRange && (
+                  <p
+                    className="text-[10px] leading-snug"
+                    style={{ color: 'var(--vml-text-muted)' }}
+                  >
+                    PC tap: adds internal series multiplier resistor for higher
+                    voltage rating.
+                  </p>
+                )}
               </div>
             );
           }

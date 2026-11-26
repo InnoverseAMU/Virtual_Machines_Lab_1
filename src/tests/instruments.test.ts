@@ -12,6 +12,7 @@ import { NET_A } from '../core/experiments/ex3_1';
 import {
   deriveHiddenPolarity,
   deriveHiddenTerminalScramble,
+  describeWattmeterCcLinkMode,
   evaluateAnalogMeter,
   evaluateWattmeter,
 } from '../core/physics/meters';
@@ -165,5 +166,36 @@ describe('Platform generalisation: netlist crossProduct, fault factories, instru
     );
     expect(polarities).toContain(1);
     expect(polarities).toContain(-1);
+  });
+
+  it('maps wattmeter CC ranges onto Series / Series-Parallel / Parallel link arrangements', () => {
+    expect(describeWattmeterCcLinkMode(0.5, [0.5, 1])).toEqual({
+      short: 'SER',
+      label: 'Series',
+    });
+    expect(describeWattmeterCcLinkMode(1, [0.5, 1])).toEqual({
+      short: 'PAR',
+      label: 'Parallel',
+    });
+    expect(describeWattmeterCcLinkMode(5, [5, 10])).toEqual({
+      short: 'SER',
+      label: 'Series',
+    });
+    expect(describeWattmeterCcLinkMode(10, [5, 10])).toEqual({
+      short: 'PAR',
+      label: 'Parallel',
+    });
+    expect(describeWattmeterCcLinkMode(2.5, [2.5, 5, 10])).toEqual({
+      short: 'SER',
+      label: 'All-Series',
+    });
+    expect(describeWattmeterCcLinkMode(5, [2.5, 5, 10])).toEqual({
+      short: 'S-P',
+      label: 'Series-Parallel',
+    });
+    expect(describeWattmeterCcLinkMode(10, [2.5, 5, 10])).toEqual({
+      short: 'PAR',
+      label: 'Parallel',
+    });
   });
 });

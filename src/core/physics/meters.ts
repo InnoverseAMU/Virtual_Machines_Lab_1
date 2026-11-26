@@ -226,3 +226,30 @@ export function toWattmeterMeterReading(
     ...reading,
   };
 }
+
+export interface WattmeterCcLinkMode {
+  short: 'SER' | 'S-P' | 'PAR';
+  label: 'Series' | 'All-Series' | 'Series-Parallel' | 'Parallel';
+}
+
+/**
+ * Maps a wattmeter current-coil range selector value onto its physical
+ * Series / Parallel coil-half link arrangement.
+ */
+export function describeWattmeterCcLinkMode(
+  iRange: number,
+  options: readonly number[],
+): WattmeterCcLinkMode | null {
+  if (options.length < 2) return null;
+  const sorted = [...options].sort((a, b) => a - b);
+  const idx = sorted.indexOf(iRange);
+  if (idx < 0) return null;
+  if (sorted.length === 2) {
+    return idx === 0
+      ? { short: 'SER', label: 'Series' }
+      : { short: 'PAR', label: 'Parallel' };
+  }
+  if (idx === 0) return { short: 'SER', label: 'All-Series' };
+  if (idx === sorted.length - 1) return { short: 'PAR', label: 'Parallel' };
+  return { short: 'S-P', label: 'Series-Parallel' };
+}
