@@ -429,7 +429,6 @@ export function App() {
         !e.ctrlKey &&
         !e.altKey &&
         confirmAction === null &&
-        (isSelf || isObserve) &&
         experimentAssets.diagrams.length > 0
       ) {
         toggleDiagramPanel();
@@ -764,43 +763,43 @@ export function App() {
             })}
           </div>
 
-          {/* Reference assets (Self & Observe modes only) */}
-          {(isSelf || isObserve) && (
-            <div className="pointer-events-auto order-4 flex w-full flex-wrap items-center justify-center gap-1.5 sm:order-none sm:w-auto sm:justify-start">
-              <button
-                type="button"
-                disabled={experimentAssets.diagrams.length === 0}
-                onClick={toggleDiagramPanel}
-                aria-pressed={diagramPanelOpen}
-                aria-label={
-                  experimentAssets.diagrams.length === 0
-                    ? 'Diagram not added yet'
-                    : 'View circuit diagram (D)'
-                }
-                title={
-                  experimentAssets.diagrams.length === 0
-                    ? 'Diagram not added yet'
-                    : 'View circuit diagram (D)'
-                }
-                className="inline-flex h-8 shrink-0 items-center rounded-full px-2.5 text-xs font-medium shadow-lg backdrop-blur transition disabled:cursor-not-allowed disabled:opacity-55"
-                style={{
-                  backgroundColor: diagramPanelOpen
-                    ? 'var(--vml-accent)'
-                    : 'var(--vml-panel)',
-                  border: '1px solid var(--vml-border)',
-                  color: diagramPanelOpen
-                    ? 'var(--vml-accent-text)'
-                    : 'var(--vml-text)',
-                }}
-              >
-                {experimentAssets.diagrams.length === 0
+          {/* Reference assets (diagram available in all lab modes; PDF in Self & Observe) */}
+          <div className="pointer-events-auto order-4 flex w-full flex-wrap items-center justify-center gap-1.5 sm:order-none sm:w-auto sm:justify-start">
+            <button
+              type="button"
+              disabled={experimentAssets.diagrams.length === 0}
+              onClick={toggleDiagramPanel}
+              aria-pressed={diagramPanelOpen}
+              aria-label={
+                experimentAssets.diagrams.length === 0
                   ? 'Diagram not added yet'
-                  : 'View circuit diagram (D)'}
-              </button>
+                  : 'View circuit diagram (D)'
+              }
+              title={
+                experimentAssets.diagrams.length === 0
+                  ? 'Diagram not added yet'
+                  : 'View circuit diagram (D)'
+              }
+              className="inline-flex h-8 shrink-0 items-center rounded-full px-2.5 text-xs font-medium shadow-lg backdrop-blur transition disabled:cursor-not-allowed disabled:opacity-55"
+              style={{
+                backgroundColor: diagramPanelOpen
+                  ? 'var(--vml-accent)'
+                  : 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: diagramPanelOpen
+                  ? 'var(--vml-accent-text)'
+                  : 'var(--vml-text)',
+              }}
+            >
+              {experimentAssets.diagrams.length === 0
+                ? 'Diagram not added yet'
+                : 'View circuit diagram (D)'}
+            </button>
 
+            {(isSelf || isObserve) && (
               <ExperimentPdfActions pdf={experimentAssets.pdf} variant="topbar" />
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Right group: theme, labels, panel toggle, and phone More menu */}
           <div className="pointer-events-auto order-2 relative flex items-center gap-1.5 sm:order-none">
@@ -938,6 +937,9 @@ export function App() {
             conditionStatus={learnConditionStatus}
             showNumericReadouts={showNumericReadouts}
             onToggleNumericReadouts={toggleNumericReadouts}
+            diagrams={experimentAssets.diagrams}
+            diagramPanelOpen={diagramPanelOpen}
+            onToggleDiagram={toggleDiagramPanel}
             learnFinished={learnFinished}
             onNext={handleLearnNext}
             onBack={handleLearnBack}
@@ -953,15 +955,13 @@ export function App() {
           <SolutionBanner experiment={experiment} />
         ) : null}
 
-        {(isSelf || isObserve) && (
-          <DiagramPanel
-            open={diagramPanelOpen}
-            experimentId={experiment.id}
-            experimentTitle={experiment.title}
-            diagrams={experimentAssets.diagrams}
-            onClose={closeDiagramPanel}
-          />
-        )}
+        <DiagramPanel
+          open={diagramPanelOpen}
+          experimentId={experiment.id}
+          experimentTitle={experiment.title}
+          diagrams={experimentAssets.diagrams}
+          onClose={closeDiagramPanel}
+        />
       </div>
 
       <PdfPanel />
