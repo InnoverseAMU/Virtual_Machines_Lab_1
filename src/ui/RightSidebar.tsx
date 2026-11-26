@@ -87,7 +87,7 @@ const ControlsSection = memo(function ControlsSection({
     <section aria-label="Bench controls" className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2
-          className="text-[11px] font-bold tracking-wider uppercase"
+          className="font-space text-[11px] font-bold tracking-wider uppercase"
           style={{ color: 'var(--vml-text-muted)' }}
         >
           Controls
@@ -173,7 +173,7 @@ const ControlsSection = memo(function ControlsSection({
                   onChange={(e) =>
                     setControlValue(ctrl.id, Number(e.target.value))
                   }
-                  className="w-full accent-sky-500"
+                  className="w-full accent-sky-500 dark:accent-cyan-400"
                 />
                 <div className="flex items-center justify-between gap-1">
                   <button
@@ -392,7 +392,7 @@ const ReadingsSection = memo(function ReadingsSection({
     <section aria-label="Meter readings" className="space-y-2.5 text-xs">
       <div className="flex items-center justify-between gap-2">
         <h2
-          className="text-[11px] font-bold tracking-wider uppercase"
+          className="font-space text-[11px] font-bold tracking-wider uppercase"
           style={{ color: 'var(--vml-text-muted)' }}
         >
           Readings

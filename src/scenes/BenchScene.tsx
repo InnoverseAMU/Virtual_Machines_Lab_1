@@ -457,7 +457,86 @@ export function BenchScene({
     };
   }, [benchMaterials]);
 
-  const focusColor = resolvedTheme === 'dark' ? '#38bdf8' : '#0284c7';
+  const benchMatTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 384;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const isDark = resolvedTheme === 'dark';
+      const lineColor = isDark
+        ? 'rgba(0, 242, 254, 0.09)'
+        : 'rgba(2, 132, 199, 0.11)';
+      const borderColor = isDark
+        ? 'rgba(0, 242, 254, 0.28)'
+        : 'rgba(2, 132, 199, 0.28)';
+
+      // Subtle engineering blueprint grid
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = 1;
+      const step = 32;
+      for (let x = 0; x <= canvas.width; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, 0);
+        ctx.lineTo(x + 0.5, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= canvas.height; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(canvas.width, y + 0.5);
+        ctx.stroke();
+      }
+
+      // Outer perimeter border
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 3;
+      ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    return tex;
+  }, [resolvedTheme]);
+
+  useEffect(() => {
+    return () => {
+      benchMatTexture.dispose();
+    };
+  }, [benchMatTexture]);
+
+  const floorGrid = useMemo(() => {
+    const isDark = resolvedTheme === 'dark';
+    const helper = new THREE.GridHelper(
+      80,
+      80,
+      isDark ? '#0ea5e9' : '#64748b',
+      isDark ? '#0d2238' : '#94a3b8',
+    );
+    const mats = Array.isArray(helper.material)
+      ? helper.material
+      : [helper.material];
+    for (const m of mats) {
+      m.transparent = true;
+      m.opacity = isDark ? 0.2 : 0.24;
+      m.depthWrite = false;
+    }
+    return helper;
+  }, [resolvedTheme]);
+
+  useEffect(() => {
+    return () => {
+      floorGrid.geometry.dispose();
+      const mats = Array.isArray(floorGrid.material)
+        ? floorGrid.material
+        : [floorGrid.material];
+      for (const m of mats) m.dispose();
+    };
+  }, [floorGrid]);
+
+  const focusColor = resolvedTheme === 'dark' ? '#00f2fe' : '#0284c7';
   const overviewPose = cameraPresets[0]?.pos ?? [0.25, 9.2, 8.4];
 
   return (
@@ -500,12 +579,31 @@ export function BenchScene({
         >
           <boxGeometry args={[11.8, 0.18, 4.3]} />
         </mesh>
+        {/* Subtle blueprint ESD mat grid */}
+        <mesh position={[0.15, 0.0015, -0.15]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[11.56, 4.06]} />
+          <meshBasicMaterial
+            map={benchMatTexture}
+            transparent
+            depthWrite={false}
+          />
+        </mesh>
         <mesh
           position={[0.15, -0.09, 2.01]}
           receiveShadow
           material={benchMaterials.benchEdgeMat}
         >
           <boxGeometry args={[11.8, 0.18, 0.04]} />
+        </mesh>
+        {/* Crisp cyan front edge accent line */}
+        <mesh position={[0.15, -0.004, 2.015]}>
+          <boxGeometry args={[11.8, 0.014, 0.036]} />
+          <meshStandardMaterial
+            color={resolvedTheme === 'dark' ? '#00f2fe' : '#0284c7'}
+            emissive={resolvedTheme === 'dark' ? '#00f2fe' : '#000000'}
+            emissiveIntensity={resolvedTheme === 'dark' ? 0.55 : 0}
+            roughness={0.3}
+          />
         </mesh>
         {[
           [-5.4, -1.18, -1.9],
@@ -531,6 +629,7 @@ export function BenchScene({
         >
           <planeGeometry args={[80, 80]} />
         </mesh>
+        <primitive object={floorGrid} position={[0, -2.174, 0]} />
       </group>
 
       {/* Stage apparatus + risers + Learn mode focus highlights */}

@@ -1,33 +1,65 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-orbitron: "Orbitron", sans-serif;
+  --font-space: "Space Grotesk", sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 :root,
 :root[data-theme="dark"] {
-  --vml-page-bg: #0f172a;
-  --vml-panel: rgba(15, 23, 42, 0.92);
-  --vml-panel-hover: #1e293b;
+  --vml-page-bg: #04070b;
+  --vml-panel: rgba(11, 16, 27, 0.92);
+  --vml-panel-hover: #131d31;
   --vml-text: #f8fafc;
   --vml-text-muted: #cbd5e1;
-  --vml-border: rgba(71, 85, 105, 0.85);
-  --vml-accent: #0ea5e9;
+  --vml-border: rgba(56, 189, 248, 0.24);
+  --vml-accent: #00f2fe;
   --vml-accent-text: #020617;
-  --vml-tooltip-bg: #0f172a;
+  --vml-tooltip-bg: rgba(11, 16, 27, 0.97);
   --vml-tooltip-text: #f8fafc;
-  --vml-tooltip-border: #475569;
+  --vml-tooltip-border: rgba(56, 189, 248, 0.35);
+
+  /* Stitch AMU Vault tokens */
+  --vault-bg: #04070b;
+  --vault-mode-bg: #070b12;
+  --vault-header-bg: rgba(6, 10, 18, 0.82);
+  --vault-footer-bg: #03060a;
+  --vault-card-bg: radial-gradient(130% 120% at 50% 0%, rgba(20, 32, 51, 0.78) 0%, rgba(7, 12, 20, 0.96) 100%);
+  --vault-mode-card-bg: #0b101b;
+  --vault-text: #f1f5f9;
+  --vault-text-secondary: #cbd5e1;
+  --vault-text-muted: #94a3b8;
+  --vault-grid-line: rgba(255, 255, 255, 0.018);
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --vml-page-bg: #f1f5f9;
-  --vml-panel: rgba(255, 255, 255, 0.92);
+  --vml-page-bg: #f4f7fb;
+  --vml-panel: rgba(255, 255, 255, 0.94);
   --vml-panel-hover: #e2e8f0;
   --vml-text: #0f172a;
   --vml-text-muted: #334155;
-  --vml-border: rgba(148, 163, 184, 0.85);
+  --vml-border: rgba(148, 163, 184, 0.65);
   --vml-accent: #0284c7;
   --vml-accent-text: #ffffff;
-  --vml-tooltip-bg: #ffffff;
+  --vml-tooltip-bg: rgba(255, 255, 255, 0.97);
   --vml-tooltip-text: #0f172a;
   --vml-tooltip-border: #94a3b8;
+
+  /* Light counterpart for Vault & Mode pages */
+  --vault-bg: #f4f7fb;
+  --vault-mode-bg: #f4f7fb;
+  --vault-header-bg: rgba(255, 255, 255, 0.86);
+  --vault-footer-bg: #eaf0f7;
+  --vault-card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+  --vault-mode-card-bg: rgba(255, 255, 255, 0.96);
+  --vault-text: #0f172a;
+  --vault-text-secondary: #334155;
+  --vault-text-muted: #64748b;
+  --vault-grid-line: rgba(15, 23, 42, 0.04);
   color-scheme: light;
 }
 
@@ -42,4 +74,120 @@ body,
   overflow-y: hidden;
   background-color: var(--vml-page-bg);
   color: var(--vml-text);
+  font-family: var(--font-sans);
+}
+
+/* Stitch Vault & Mode Select Styling */
+.vault-page {
+  background-color: var(--vault-bg);
+  color: var(--vault-text);
+}
+
+.mode-page {
+  background-color: var(--vault-mode-bg);
+  color: var(--vault-text);
+}
+
+:root[data-theme="dark"] .mode-page {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(14, 116, 144, 0.18), transparent 70%),
+    radial-gradient(circle at 50% 100%, rgba(15, 23, 42, 0.6), transparent 80%);
+}
+
+:root[data-theme="light"] .mode-page {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(14, 165, 233, 0.12), transparent 70%),
+    radial-gradient(circle at 50% 100%, rgba(226, 232, 240, 0.8), transparent 80%);
+}
+
+.blueprint-grid {
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right, var(--vault-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--vault-grid-line) 1px, transparent 1px);
+}
+
+:root[data-theme="dark"] .neon-cyan-glow {
+  text-shadow:
+    0 0 15px rgba(0, 242, 254, 0.75),
+    0 0 35px rgba(0, 242, 254, 0.4),
+    0 0 60px rgba(0, 242, 254, 0.2);
+}
+
+:root[data-theme="light"] .neon-cyan-glow {
+  text-shadow: 0 2px 18px rgba(2, 132, 199, 0.18);
+}
+
+.vault-card {
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--vault-card-bg);
+}
+
+:root[data-theme="dark"] .glow-cyan-hover:hover {
+  box-shadow: 0 0 30px -5px rgba(0, 242, 254, 0.35), 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  border-color: rgba(0, 242, 254, 0.6);
+  transform: translateY(-3px);
+}
+
+:root[data-theme="dark"] .glow-amber-hover:hover {
+  box-shadow: 0 0 30px -5px rgba(245, 158, 11, 0.35), 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  border-color: rgba(245, 158, 11, 0.6);
+  transform: translateY(-3px);
+}
+
+:root[data-theme="dark"] .glow-yellow-hover:hover {
+  box-shadow: 0 0 30px -5px rgba(234, 179, 8, 0.3), 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  border-color: rgba(234, 179, 8, 0.5);
+  transform: translateY(-3px);
+}
+
+:root[data-theme="dark"] .glow-emerald-hover:hover {
+  box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.3), 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  border-color: rgba(16, 185, 129, 0.5);
+  transform: translateY(-3px);
+}
+
+:root[data-theme="dark"] .glow-pink-hover:hover {
+  box-shadow: 0 0 30px -5px rgba(236, 72, 153, 0.35), 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  border-color: rgba(236, 72, 153, 0.55);
+  transform: translateY(-3px);
+}
+
+:root[data-theme="dark"] .glow-purple-hover:hover {
+  box-shadow: 0 0 30px -5px rgba(168, 85, 247, 0.35), 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+  border-color: rgba(168, 85, 247, 0.55);
+  transform: translateY(-3px);
+}
+
+:root[data-theme="light"] .glow-cyan-hover:hover,
+:root[data-theme="light"] .glow-amber-hover:hover,
+:root[data-theme="light"] .glow-yellow-hover:hover,
+:root[data-theme="light"] .glow-emerald-hover:hover,
+:root[data-theme="light"] .glow-pink-hover:hover,
+:root[data-theme="light"] .glow-purple-hover:hover {
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.14);
+  transform: translateY(-3px);
+}
+
+.mode-card-transition {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--vault-mode-card-bg);
+}
+
+:root[data-theme="dark"] .mode-card-transition {
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+:root[data-theme="dark"] .mode-card-transition:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 35px -8px rgba(0, 242, 254, 0.18), inset 0 1px 1px rgba(0, 242, 254, 0.25);
+}
+
+:root[data-theme="light"] .mode-card-transition {
+  box-shadow: 0 8px 24px -10px rgba(15, 23, 42, 0.1);
+}
+
+:root[data-theme="light"] .mode-card-transition:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 32px -10px rgba(2, 132, 199, 0.2);
 }

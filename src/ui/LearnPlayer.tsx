@@ -159,7 +159,7 @@ export function LearnPlayer({
   return (
     <section
       aria-label="Guided walkthrough"
-      className="pointer-events-auto absolute right-2 bottom-14 left-2 z-20 max-w-[calc(100%-1rem)] rounded-2xl p-3.5 shadow-2xl backdrop-blur md:right-auto md:bottom-3 md:left-3 md:w-[360px] md:max-w-[calc(100%-1.5rem)] md:p-4"
+      className="pointer-events-auto absolute right-2 bottom-14 left-2 z-20 max-w-[calc(100%-1rem)] rounded-2xl p-3.5 shadow-2xl backdrop-blur-md md:right-auto md:bottom-3 md:left-3 md:w-[360px] md:max-w-[calc(100%-1.5rem)] md:p-4 dark:shadow-[0_0_28px_-8px_rgba(0,242,254,0.22)]"
       style={{
         backgroundColor: 'var(--vml-panel)',
         border: '1px solid var(--vml-border)',
@@ -180,7 +180,7 @@ export function LearnPlayer({
               Exit
             </button>
           </div>
-          <h2 className="text-sm font-bold md:text-base">
+          <h2 className="font-space text-sm font-bold md:text-base">
             {experimentTitle} Walkthrough Complete
           </h2>
           <p
@@ -277,7 +277,7 @@ export function LearnPlayer({
             </div>
           </div>
 
-          <h2 className="text-sm font-bold leading-snug md:text-base">
+          <h2 className="font-space text-sm font-bold leading-snug md:text-base">
             {step.title}
           </h2>
 

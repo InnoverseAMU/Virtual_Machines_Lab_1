@@ -39,7 +39,7 @@ export interface ThemeTokens {
 }
 
 /**
- * High-contrast net wire colors (>= 3:1 contrast against both dark #332a23
+ * High-contrast net wire colors (>= 3:1 contrast against both dark #0e1726
  * and light #f1f5f9 benches).
  */
 export const NET_WIRE_COLORS = [
@@ -58,44 +58,44 @@ export const TERMINAL_SELECTED_COLOR = '#0284c7';
 export const THEME_TOKENS: Record<ResolvedTheme, ThemeTokens> = {
   dark: {
     ui: {
-      pageBg: '#0f172a',
-      panel: 'rgba(15, 23, 42, 0.92)',
-      panelHover: '#1e293b',
+      pageBg: '#04070b',
+      panel: 'rgba(11, 16, 27, 0.92)',
+      panelHover: '#131d31',
       text: '#f8fafc',
       textMuted: '#cbd5e1',
-      border: 'rgba(71, 85, 105, 0.85)',
-      accent: '#0ea5e9',
+      border: 'rgba(56, 189, 248, 0.24)',
+      accent: '#00f2fe',
       accentText: '#020617',
-      tooltipBg: 'rgba(15, 23, 42, 0.96)',
+      tooltipBg: 'rgba(11, 16, 27, 0.97)',
       tooltipText: '#f8fafc',
-      tooltipBorder: '#475569',
+      tooltipBorder: 'rgba(56, 189, 248, 0.35)',
     },
     scene: {
-      background: '#131c2e',
-      fog: '#131c2e',
-      floor: '#0f172a',
-      benchTop: '#332a23',
-      benchEdge: '#64748b',
-      benchLegs: '#1e293b',
-      ambientColor: '#ffffff',
-      ambientIntensity: 0.78,
+      background: '#050911',
+      fog: '#050911',
+      floor: '#04070b',
+      benchTop: '#0e1726',
+      benchEdge: '#164e63',
+      benchLegs: '#0a111d',
+      ambientColor: '#e0f2fe',
+      ambientIntensity: 0.85,
       hemisphereSky: '#e2e8f0',
-      hemisphereGround: '#334155',
-      hemisphereIntensity: 0.56,
+      hemisphereGround: '#0f172a',
+      hemisphereIntensity: 0.58,
       keyLightColor: '#fffbeb',
-      keyLightIntensity: 1.55,
-      fillLightColor: '#cbd5e1',
-      fillLightIntensity: 0.65,
+      keyLightIntensity: 1.62,
+      fillLightColor: '#bae6fd',
+      fillLightIntensity: 0.68,
     },
   },
   light: {
     ui: {
-      pageBg: '#f1f5f9',
-      panel: 'rgba(255, 255, 255, 0.92)',
+      pageBg: '#f4f7fb',
+      panel: 'rgba(255, 255, 255, 0.94)',
       panelHover: '#e2e8f0',
       text: '#0f172a',
       textMuted: '#334155',
-      border: 'rgba(148, 163, 184, 0.85)',
+      border: 'rgba(148, 163, 184, 0.65)',
       accent: '#0284c7',
       accentText: '#ffffff',
       tooltipBg: 'rgba(255, 255, 255, 0.97)',
@@ -103,12 +103,12 @@ export const THEME_TOKENS: Record<ResolvedTheme, ThemeTokens> = {
       tooltipBorder: '#94a3b8',
     },
     scene: {
-      background: '#dbe4ee',
-      fog: '#dbe4ee',
+      background: '#dbe6f2',
+      fog: '#dbe6f2',
       floor: '#cbd5e1',
       benchTop: '#f1f5f9',
-      benchEdge: '#94a3b8',
-      benchLegs: '#475569',
+      benchEdge: '#0284c7',
+      benchLegs: '#334155',
       ambientColor: '#ffffff',
       ambientIntensity: 0.85,
       hemisphereSky: '#ffffff',
