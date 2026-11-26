@@ -1,4 +1,9 @@
-import type { ComponentInstance, TransformerLoadOutput } from '../core/types';
+import type {
+  ComponentInstance,
+  ConnectionState,
+  ControlDef,
+  TransformerLoadOutput,
+} from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { AcSupply } from './AcSupply';
 import { AnalogMeter } from './AnalogMeter';
@@ -9,33 +14,70 @@ import { Wattmeter } from './Wattmeter';
 
 interface ComponentRendererProps {
   instance: ComponentInstance;
+  controlsDef: ControlDef[];
   labOutput?: TransformerLoadOutput;
+  connectionState?: ConnectionState;
 }
 
 export function ComponentRenderer({
   instance,
+  controlsDef,
   labOutput,
+  connectionState,
 }: ComponentRendererProps) {
   const supplyOn = useControlsStore((s) => s.supplyOn);
+  const mcbTripped = useControlsStore((s) => s.mcbTripped);
   const variacV = useControlsStore((s) => s.variacV);
   const wmVRange = useControlsStore((s) => s.wmVRange);
   const wmIRange = useControlsStore((s) => s.wmIRange);
-  const lamps = useControlsStore((s) => s.lamps);
+  const lampStates = useControlsStore((s) => s.lampStates);
 
   switch (instance.type) {
     case 'acSupply':
-      return <AcSupply instance={instance} supplyOn={supplyOn} />;
-    case 'variac1ph':
-      return <Variac instance={instance} variacV={variacV} />;
-    case 'wattmeter':
+      return (
+        <AcSupply
+          instance={instance}
+          supplyOn={supplyOn}
+          mcbTripped={mcbTripped}
+        />
+      );
+    case 'variac1ph': {
+      const knobDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const minV = knobDef?.kind === 'knob' ? knobDef.min : 0;
+      const maxV = knobDef?.kind === 'knob' ? knobDef.max : 270;
+      const stepV = knobDef?.kind === 'knob' ? knobDef.step : 1;
+      return (
+        <Variac
+          instance={instance}
+          variacV={variacV}
+          minV={minV}
+          maxV={maxV}
+          stepV={stepV}
+        />
+      );
+    }
+    case 'wattmeter': {
+      const vDef = controlsDef.find(
+        (c) => c.id === 'wm.vRange' && c.kind === 'selector',
+      );
+      const iDef = controlsDef.find(
+        (c) => c.id === 'wm.iRange' && c.kind === 'selector',
+      );
+      const vOptions = vDef?.kind === 'selector' ? vDef.options : [150, 300];
+      const iOptions = iDef?.kind === 'selector' ? iDef.options : [2.5, 5, 10];
       return (
         <Wattmeter
           instance={instance}
           reading={labOutput?.meters.wm}
           vRange={wmVRange}
           iRange={wmIRange}
+          vOptions={vOptions}
+          iOptions={iOptions}
         />
       );
+    }
     case 'transformer1ph':
       return <Transformer instance={instance} />;
     case 'voltmeter':
@@ -55,8 +97,10 @@ export function ComponentRenderer({
       return (
         <LampBank
           instance={instance}
-          lampsLit={lamps}
-          energised={(labOutput?.V2 ?? 0) > 10 && (labOutput?.I2 ?? 0) > 0.1}
+          lampStates={lampStates}
+          supplyOn={supplyOn}
+          loadConnected={connectionState?.loadConnected ?? false}
+          v2={labOutput?.V2 ?? 0}
         />
       );
   }

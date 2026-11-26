@@ -90,7 +90,7 @@ export function evaluateWattmeter(
   let pointerRatio = 0;
   if (!damaged) {
     if (reversed && shownValue < 0) {
-      pointerRatio = Math.max(-0.12, Math.min(0, ratio));
+      pointerRatio = Math.max(-0.05, Math.min(0, ratio));
     } else if (ccOverrange || pcOverrange) {
       pointerRatio = 1.05;
     } else {

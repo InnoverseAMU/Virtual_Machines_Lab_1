@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { canModifyWiring } from '../core/circuit/validate';
 import type { TerminalId, Wire, WireEndpointPair } from '../core/types';
+import { useControlsStore } from './controlsStore';
 import { useSessionStore } from './sessionStore';
 
 interface WiringState {
@@ -71,6 +72,7 @@ export const useWiringStore = create<WiringState>((set, get) => ({
       b: id,
     };
 
+    useControlsStore.getState().clearMcbTrip();
     set({
       wires: [...wires, newWire],
       selectedTerminal: null,
@@ -88,6 +90,7 @@ export const useWiringStore = create<WiringState>((set, get) => ({
       return;
     }
 
+    useControlsStore.getState().clearMcbTrip();
     set((state) => ({
       wires: state.wires.filter((w) => w.id !== wireId),
     }));
@@ -103,10 +106,12 @@ export const useWiringStore = create<WiringState>((set, get) => ({
       });
       return;
     }
+    useControlsStore.getState().clearMcbTrip();
     set({ wires: [], selectedTerminal: null });
   },
 
-  setSolutionWires: (pairs) =>
+  setSolutionWires: (pairs) => {
+    useControlsStore.getState().clearMcbTrip();
     set({
       wires: pairs.map(([a, b]) => ({
         id: makeWireId(a, b),
@@ -114,5 +119,6 @@ export const useWiringStore = create<WiringState>((set, get) => ({
         b,
       })),
       selectedTerminal: null,
-    }),
+    });
+  },
 }));

@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from 'react';
+import { useFrame } from '@react-three/fiber';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
 interface LabelPlateProps {
@@ -81,6 +82,7 @@ interface MeterDialProps {
   unit: string;
   maxScale: number;
   pointerRatio: number;
+  readingText: string;
   width?: number;
   height?: number;
   position?: [number, number, number];
@@ -88,6 +90,7 @@ interface MeterDialProps {
   allowNegative?: boolean;
   overrange?: boolean;
   damaged?: boolean;
+  reversed?: boolean;
 }
 
 export function MeterDial({
@@ -95,6 +98,7 @@ export function MeterDial({
   unit,
   maxScale,
   pointerRatio,
+  readingText,
   width = 0.62,
   height = 0.42,
   position = [0, 0, 0],
@@ -102,23 +106,33 @@ export function MeterDial({
   allowNegative = false,
   overrange = false,
   damaged = false,
+  reversed = false,
 }: MeterDialProps) {
+  const statusBadge = damaged
+    ? 'DAMAGED'
+    : reversed
+      ? 'REVERSED'
+      : overrange
+        ? 'OVERRANGE'
+        : '';
+
   const faceTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
-    canvas.height = 340;
+    canvas.height = 360;
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.fillStyle = '#f8fafc';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.strokeStyle = overrange || damaged ? '#dc2626' : '#334155';
-      ctx.lineWidth = 8;
+      const alertBorder = damaged || overrange || reversed;
+      ctx.strokeStyle = alertBorder ? '#dc2626' : '#334155';
+      ctx.lineWidth = alertBorder ? 12 : 8;
       ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
 
       const cx = canvas.width / 2;
-      const cy = canvas.height * 0.84;
-      const r = canvas.width * 0.38;
+      const cy = canvas.height * 0.78;
+      const r = canvas.width * 0.36;
       const startAngle = -Math.PI * 0.82;
       const endAngle = -Math.PI * 0.18;
 
@@ -143,7 +157,7 @@ export function MeterDial({
 
         if (isMajor) {
           const val = Math.round((i / (majorTicks * 5)) * maxScale);
-          const rLabel = r - 44;
+          const rLabel = r - 42;
           ctx.fillStyle = '#0f172a';
           ctx.font = '700 22px ui-monospace, monospace';
           ctx.textAlign = 'center';
@@ -157,22 +171,39 @@ export function MeterDial({
       }
 
       if (allowNegative) {
-        // Small sub-zero tick zone to indicate reverse deflection
+        // -5% sub-zero arc for reversed reading
         ctx.beginPath();
-        ctx.arc(cx, cy, r, startAngle - 0.14, startAngle);
+        ctx.arc(cx, cy, r, startAngle - 0.11, startAngle);
         ctx.strokeStyle = '#dc2626';
         ctx.lineWidth = 5;
         ctx.stroke();
       }
 
       ctx.fillStyle = '#1e293b';
-      ctx.font = '700 26px ui-sans-serif, system-ui, sans-serif';
+      ctx.font = '700 24px ui-sans-serif, system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(title, cx, 56);
+      ctx.fillText(title, cx, 44);
 
       ctx.fillStyle = '#475569';
-      ctx.font = '700 24px ui-monospace, monospace';
-      ctx.fillText(unit, cx, cy - 52);
+      ctx.font = '700 22px ui-monospace, monospace';
+      ctx.fillText(unit, cx, cy - 58);
+
+      if (statusBadge) {
+        const bw = 178;
+        const bh = 34;
+        ctx.fillStyle = reversed && !damaged ? '#d97706' : '#dc2626';
+        ctx.fillRect(cx - bw / 2, cy - 102, bw, bh);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '800 20px ui-sans-serif, system-ui, sans-serif';
+        ctx.fillText(statusBadge, cx, cy - 84);
+      }
+
+      // Numeric readout strip under dial
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(48, canvas.height - 58, canvas.width - 96, 44);
+      ctx.fillStyle = damaged ? '#f87171' : '#38bdf8';
+      ctx.font = '700 28px ui-monospace, monospace';
+      ctx.fillText(readingText, cx, canvas.height - 35);
     }
 
     const tex = new THREE.CanvasTexture(canvas);
@@ -180,7 +211,7 @@ export function MeterDial({
     tex.anisotropy = 4;
     tex.needsUpdate = true;
     return tex;
-  }, [title, unit, maxScale, allowNegative, overrange, damaged]);
+  }, [title, unit, maxScale, allowNegative, overrange, damaged, reversed, statusBadge, readingText]);
 
   useEffect(() => {
     return () => {
@@ -190,8 +221,32 @@ export function MeterDial({
 
   // Arc spans -0.32*PI (right) to +0.32*PI (left) around +Y axis when looking at +Z
   const maxSweep = Math.PI * 0.32;
-  const clampedRatio = Math.max(allowNegative ? -0.12 : 0, Math.min(1.05, pointerRatio));
-  const needleAngle = maxSweep - clampedRatio * (maxSweep * 2);
+  const clampedTargetRatio = Math.max(
+    allowNegative ? -0.05 : 0,
+    Math.min(1.05, pointerRatio),
+  );
+  const targetAngle = maxSweep - clampedTargetRatio * (maxSweep * 2);
+
+  const needleGroupRef = useRef<THREE.Group>(null);
+  const angleRef = useRef(targetAngle);
+  const velocityRef = useRef(0);
+  const targetAngleRef = useRef(targetAngle);
+  targetAngleRef.current = targetAngle;
+
+  // Second-order underdamped spring: small overshoot, ~400 ms settle
+  useFrame((_, delta) => {
+    const group = needleGroupRef.current;
+    if (!group) return;
+    const dt = Math.min(delta, 0.05);
+    const omega = 16;
+    const zeta = 0.65;
+    const accel =
+      omega * omega * (targetAngleRef.current - angleRef.current) -
+      2 * zeta * omega * velocityRef.current;
+    velocityRef.current += accel * dt;
+    angleRef.current += velocityRef.current * dt;
+    group.rotation.z = angleRef.current;
+  });
 
   return (
     <group position={position} rotation={rotation}>
@@ -199,10 +254,13 @@ export function MeterDial({
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial map={faceTexture} roughness={0.5} />
       </mesh>
-      {/* Needle pivot near bottom center of dial */}
-      <group position={[0, -height * 0.34, 0.008]} rotation={[0, 0, needleAngle]}>
-        <mesh position={[0, height * 0.34, 0]}>
-          <boxGeometry args={[0.012, height * 0.66, 0.006]} />
+      <group
+        ref={needleGroupRef}
+        position={[0, -height * 0.28, 0.008]}
+        rotation={[0, 0, targetAngle]}
+      >
+        <mesh position={[0, height * 0.3, 0]}>
+          <boxGeometry args={[0.012, height * 0.58, 0.006]} />
           <meshStandardMaterial color={damaged ? '#64748b' : '#dc2626'} />
         </mesh>
         <mesh rotation={[Math.PI / 2, 0, 0]}>

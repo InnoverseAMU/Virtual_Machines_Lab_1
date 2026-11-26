@@ -13,7 +13,13 @@ export function AnalogMeter({ instance, reading }: AnalogMeterProps) {
   const isAmmeter = instance.type === 'ammeter';
   const range = Number(instance.params.range ?? (isAmmeter ? 25 : 300));
   const unit = isAmmeter ? 'A (AC)' : 'V (AC)';
+  const shortUnit = isAmmeter ? 'A' : 'V';
   const accentColor = isAmmeter ? '#1e3a5f' : '#3b2f2f';
+
+  const val = reading?.shownValue ?? 0;
+  const readingText = reading?.damaged
+    ? 'DAMAGED'
+    : `${val.toFixed(isAmmeter ? 2 : 1)} ${shortUnit}`;
 
   return (
     <group position={instance.position}>
@@ -39,9 +45,10 @@ export function AnalogMeter({ instance, reading }: AnalogMeterProps) {
         unit={unit}
         maxScale={range}
         pointerRatio={reading?.pointerRatio ?? 0}
+        readingText={readingText}
         width={0.64}
-        height={0.42}
-        position={[0, 0.43, -0.01]}
+        height={0.44}
+        position={[0, 0.44, -0.01]}
         rotation={[-Math.PI / 2 + 0.45, 0, 0]}
         overrange={reading?.overrange}
         damaged={reading?.damaged}
@@ -49,7 +56,7 @@ export function AnalogMeter({ instance, reading }: AnalogMeterProps) {
 
       <LabelPlate
         text={instance.label}
-        subtext={`0 - ${range} ${isAmmeter ? 'A' : 'V'}`}
+        subtext={`0 - ${range} ${shortUnit}`}
         width={0.68}
         height={0.12}
         fontSize={32}

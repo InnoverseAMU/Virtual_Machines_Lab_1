@@ -1,10 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { getExperiment } from './core/experiments/registry';
+import { evaluateExperimentPhysics } from './core/physics/evaluate';
 import type { CameraPreset } from './core/types';
 import { BenchScene } from './scenes/BenchScene';
+import { useControlsStore } from './stores/controlsStore';
 import { useSessionStore } from './stores/sessionStore';
 import { useThemeStore } from './stores/themeStore';
 import { useWiringStore } from './stores/wiringStore';
 import type { ThemeMode } from './theme/tokens';
+import { ControlPanel } from './ui/ControlPanel';
+import { MeterReadouts } from './ui/MeterReadouts';
+import { ToastBanner } from './ui/ToastBanner';
 
 const PRESET_BUTTONS: { id: CameraPreset; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -20,7 +26,19 @@ const MODE_LABELS: Record<ThemeMode, string> = {
   dark: 'Dark',
 };
 
-function ThemeIcon({ mode, resolved }: { mode: ThemeMode; resolved: 'light' | 'dark' }) {
+const STICKY_EVENT_IDS = new Set([
+  'mcb-trip',
+  'power-on-non-zero',
+  'wiring-blocked',
+]);
+
+function ThemeIcon({
+  mode,
+  resolved,
+}: {
+  mode: ThemeMode;
+  resolved: 'light' | 'dark';
+}) {
   if (mode === 'light' || (mode === 'system' && resolved === 'light')) {
     return (
       <svg
@@ -51,18 +69,81 @@ function ThemeIcon({ mode, resolved }: { mode: ThemeMode; resolved: 'light' | 'd
 }
 
 export function App() {
+  const experimentId = useSessionStore((s) => s.experimentId);
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
   const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
+  const pushToast = useSessionStore((s) => s.pushToast);
+  const dismissToast = useSessionStore((s) => s.dismissToast);
 
+  const wires = useWiringStore((s) => s.wires);
   const selectedTerminal = useWiringStore((s) => s.selectedTerminal);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
-  const wireCount = useWiringStore((s) => s.wires.length);
+
+  const supplyOn = useControlsStore((s) => s.supplyOn);
+  const variacV = useControlsStore((s) => s.variacV);
+  const wmVRange = useControlsStore((s) => s.wmVRange);
+  const wmIRange = useControlsStore((s) => s.wmIRange);
+  const lamps = useControlsStore((s) => s.lamps);
+  const gains = useControlsStore((s) => s.gains);
+  const tripMcb = useControlsStore((s) => s.tripMcb);
+  const setFocusedControl = useControlsStore((s) => s.setFocusedControl);
+  const initFromControls = useControlsStore((s) => s.initFromControls);
 
   const themeMode = useThemeStore((s) => s.mode);
   const resolvedTheme = useThemeStore((s) => s.resolved);
   const cycleThemeMode = useThemeStore((s) => s.cycleMode);
+
+  const experiment = useMemo(() => getExperiment(experimentId), [experimentId]);
+
+  useEffect(() => {
+    initFromControls(experiment.controls);
+  }, [experiment, initFromControls]);
+
+  // Memoised physics evaluation: runs only when wires or controls change, never per frame
+  const evaluation = useMemo(
+    () =>
+      evaluateExperimentPhysics(
+        experiment,
+        wires,
+        { supplyOn, variacV, wmVRange, wmIRange, lamps },
+        gains,
+      ),
+    [experiment, wires, supplyOn, variacV, wmVRange, wmIRange, lamps, gains],
+  );
+
+  // MCB trip handling & edge-triggered runtime event toasts
+  const prevEventIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const { mcbTripped, events } = evaluation.output;
+    if (mcbTripped) {
+      tripMcb();
+    }
+
+    const currentIds = new Set(events.map((e) => e.id));
+
+    for (const ev of events) {
+      if (!prevEventIdsRef.current.has(ev.id)) {
+        pushToast(ev);
+      }
+    }
+
+    for (const oldId of prevEventIdsRef.current) {
+      if (!currentIds.has(oldId) && !STICKY_EVENT_IDS.has(oldId)) {
+        dismissToast(oldId);
+      }
+    }
+
+    prevEventIdsRef.current = currentIds;
+  }, [evaluation.output, tripMcb, pushToast, dismissToast]);
+
+  // Clear MCB trip toast when supply is cleanly re-energised
+  useEffect(() => {
+    if (supplyOn && !evaluation.output.mcbTripped) {
+      dismissToast('mcb-trip');
+    }
+  }, [supplyOn, evaluation.output.mcbTripped, dismissToast]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -75,6 +156,7 @@ export function App() {
       }
       if (e.key === 'Escape') {
         clearSelectedTerminal();
+        setFocusedControl(null);
       } else if (
         (e.key === 'l' || e.key === 'L') &&
         !e.metaKey &&
@@ -86,14 +168,17 @@ export function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [clearSelectedTerminal, toggleTerminalLabels]);
+  }, [clearSelectedTerminal, setFocusedControl, toggleTerminalLabels]);
 
   return (
     <div className="fixed inset-0 overflow-hidden select-none">
-      <BenchScene />
+      <BenchScene
+        labOutput={evaluation.output}
+        connectionState={evaluation.connectionState}
+      />
 
       {/* Top bar: camera presets, theme toggle, terminal labels toggle, status */}
-      <div className="pointer-events-none absolute inset-x-0 top-3 flex flex-wrap items-center justify-center gap-2 px-3">
+      <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex flex-wrap items-center justify-center gap-2 px-3">
         <div
           className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full p-1 shadow-lg backdrop-blur"
           style={{
@@ -155,7 +240,7 @@ export function App() {
         </button>
 
         <div
-          className="rounded-full px-3 py-1.5 text-xs shadow-lg backdrop-blur"
+          className="hidden rounded-full px-3 py-1.5 text-xs shadow-lg backdrop-blur lg:block"
           style={{
             backgroundColor: 'var(--vml-panel)',
             border: '1px solid var(--vml-border)',
@@ -171,12 +256,14 @@ export function App() {
               (click target terminal or Esc)
             </span>
           ) : (
-            <span>
-              Wires: {wireCount} · Click terminals to wire, click wire to delete
-            </span>
+            <span>Wires: {wires.length}</span>
           )}
         </div>
       </div>
+
+      <ToastBanner />
+      <MeterReadouts output={evaluation.output} />
+      <ControlPanel controls={experiment.controls} />
     </div>
   );
 }

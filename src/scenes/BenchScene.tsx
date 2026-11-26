@@ -8,7 +8,12 @@ import { ComponentRenderer } from '../components3d/ComponentRenderer';
 import { WireMesh } from '../components3d/Wire';
 import { buildNets } from '../core/circuit/nets';
 import { getExperiment } from '../core/experiments/registry';
-import type { CameraPreset, TransformerLoadOutput } from '../core/types';
+import type {
+  CameraPreset,
+  ConnectionState,
+  TransformerLoadOutput,
+} from '../core/types';
+import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useWiringStore } from '../stores/wiringStore';
@@ -48,6 +53,7 @@ function tweenColor(
 function CameraController() {
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
+  const isDraggingControl = useControlsStore((s) => s.isDraggingControl);
   const { camera } = useThree();
   const controlsRef = useRef<ComponentRef<typeof OrbitControls>>(null);
   const isFirstRender = useRef(true);
@@ -93,6 +99,7 @@ function CameraController() {
     <OrbitControls
       ref={controlsRef}
       makeDefault
+      enabled={!isDraggingControl}
       enableDamping
       dampingFactor={0.08}
       minDistance={1.8}
@@ -239,9 +246,10 @@ function ThemedEnvironment({
 
 interface BenchSceneProps {
   labOutput?: TransformerLoadOutput;
+  connectionState?: ConnectionState;
 }
 
-export function BenchScene({ labOutput }: BenchSceneProps) {
+export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
   const experimentId = useSessionStore((s) => s.experimentId);
   const wires = useWiringStore((s) => s.wires);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
@@ -382,7 +390,12 @@ export function BenchScene({ labOutput }: BenchSceneProps) {
               <boxGeometry args={[0.96, comp.position[1], 0.92]} />
             </mesh>
           )}
-          <ComponentRenderer instance={comp} labOutput={labOutput} />
+          <ComponentRenderer
+            instance={comp}
+            controlsDef={experiment.controls}
+            labOutput={labOutput}
+            connectionState={connectionState}
+          />
         </group>
       ))}
 

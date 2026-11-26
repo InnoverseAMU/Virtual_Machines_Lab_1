@@ -8,6 +8,10 @@ import {
   DEFAULT_TRANSFORMER_PARAMS,
   solveTransformerLoad,
 } from '../core/physics/models/transformerLoad';
+import {
+  checkPowerOnSafety,
+  evaluateExperimentPhysics,
+} from '../core/physics/evaluate';
 import type { TransformerLoadControls, WireEndpointPair } from '../core/types';
 
 const CANONICAL_WIRES = netlistToWirePairs(NET_A);
@@ -126,6 +130,7 @@ describe('Exp 3.1 physics and meter models', () => {
     expect(outCC.meters.wm.reversed).toBe(true);
     expect(outCC.meters.wm.dial).toBeLessThan(0);
     expect(outCC.meters.wm.pointerRatio).toBeLessThan(0);
+    expect(outCC.meters.wm.pointerRatio).toBeGreaterThanOrEqual(-0.05);
 
     const swappedPC = CANONICAL_WIRES.map(([a, b]): WireEndpointPair => {
       const m = (t: string) =>
@@ -216,5 +221,31 @@ describe('Exp 3.1 physics and meter models', () => {
     expect(outOverload.events.some((e) => e.id === 'transformer-overheating')).toBe(
       true,
     );
+  });
+
+  it('evaluateExperimentPhysics maps ex3_1 + NET_A + controls to Section 6 reference values', () => {
+    const res = evaluateExperimentPhysics(
+      ex3_1,
+      CANONICAL_WIRES,
+      { ...baseControls, lamps: 10 },
+      { vp: 0, vs: 0, am: 0, wm: 0 },
+      { noSag: true },
+    );
+
+    expect(res.connectionState.loadConnected).toBe(true);
+    expect(res.output.V1).toBeCloseTo(230, 5);
+    expect(Math.abs(res.output.I2 - 17.0) / 17.0).toBeLessThan(0.01);
+    expect(Math.abs(res.output.V2 - 112.4) / 112.4).toBeLessThan(0.01);
+    expect(
+      res.output.meters.wm.dial * res.output.meters.wm.mf,
+    ).toBeCloseTo(res.output.Pin, 10);
+  });
+
+  it('checkPowerOnSafety warns when powered ON above 10 V and passes at <= 10 V', () => {
+    expect(checkPowerOnSafety(0)).toBeNull();
+    expect(checkPowerOnSafety(10)).toBeNull();
+    const warn = checkPowerOnSafety(11);
+    expect(warn?.severity).toBe('warning');
+    expect(warn?.message).toBe('Start the autotransformer from zero.');
   });
 });

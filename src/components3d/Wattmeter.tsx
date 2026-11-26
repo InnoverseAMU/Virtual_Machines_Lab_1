@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { getComponentDef } from '../core/components';
 import type { ComponentInstance, WattmeterReading } from '../core/types';
+import { useControlsStore } from '../stores/controlsStore';
 import { LabelPlate, MeterDial } from './LabelPlate';
 import { Terminal } from './Terminal';
 
@@ -8,6 +10,8 @@ interface WattmeterProps {
   reading?: WattmeterReading;
   vRange: number;
   iRange: number;
+  vOptions: number[];
+  iOptions: number[];
 }
 
 export function Wattmeter({
@@ -15,8 +19,18 @@ export function Wattmeter({
   reading,
   vRange,
   iRange,
+  vOptions,
+  iOptions,
 }: WattmeterProps) {
   const def = getComponentDef(instance.type);
+  const cycleWmVRange = useControlsStore((s) => s.cycleWmVRange);
+  const cycleWmIRange = useControlsStore((s) => s.cycleWmIRange);
+  const [hoveredSel, setHoveredSel] = useState<'v' | 'i' | null>(null);
+
+  const mf = (vRange * iRange) / 150;
+  const readingText = reading?.damaged
+    ? 'DAMAGED'
+    : `${(reading?.dial ?? 0).toFixed(1)} div`;
 
   return (
     <group position={instance.position}>
@@ -42,24 +56,83 @@ export function Wattmeter({
         unit={`DIV (${vRange}V / ${iRange}A)`}
         maxScale={150}
         pointerRatio={reading?.pointerRatio ?? 0}
+        readingText={readingText}
         width={0.78}
-        height={0.46}
-        position={[0, 0.48, -0.03]}
+        height={0.48}
+        position={[0, 0.49, -0.03]}
         rotation={[-Math.PI / 2 + 0.42, 0, 0]}
         allowNegative
         overrange={reading?.overrange}
         damaged={reading?.damaged}
+        reversed={reading?.reversed}
       />
 
-      <LabelPlate
-        text="WATTMETER"
-        subtext={`MF = ${((vRange * iRange) / 150).toFixed(1)} W/div`}
-        width={0.78}
-        height={0.13}
-        fontSize={32}
-        position={[0, 0.325, 0.33]}
-        rotation={[-Math.PI / 2, 0, 0]}
-      />
+      {/* Clickable Voltage Range Selector */}
+      <group position={[-0.24, 0.33, 0.33]}>
+        <mesh
+          position={[0, 0.03, 0]}
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleWmVRange(vOptions);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setHoveredSel('v');
+            document.body.style.cursor = 'pointer';
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            setHoveredSel(null);
+            document.body.style.cursor = 'auto';
+          }}
+        >
+          <boxGeometry args={[0.38, 0.14, 0.22]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        <LabelPlate
+          text={`V: ${vRange} V`}
+          width={0.34}
+          height={0.11}
+          fontSize={34}
+          bg={hoveredSel === 'v' ? '#0284c7' : '#0f172a'}
+          border="#64748b"
+          rotation={[-Math.PI / 2, 0, 0]}
+        />
+      </group>
+
+      {/* Clickable Current Range Selector */}
+      <group position={[0.24, 0.33, 0.33]}>
+        <mesh
+          position={[0, 0.03, 0]}
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleWmIRange(iOptions);
+          }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setHoveredSel('i');
+            document.body.style.cursor = 'pointer';
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            setHoveredSel(null);
+            document.body.style.cursor = 'auto';
+          }}
+        >
+          <boxGeometry args={[0.38, 0.14, 0.22]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        <LabelPlate
+          text={`I: ${iRange} A`}
+          subtext={`MF=${mf.toFixed(1)}`}
+          width={0.34}
+          height={0.11}
+          fontSize={30}
+          bg={hoveredSel === 'i' ? '#0284c7' : '#0f172a'}
+          border="#64748b"
+          rotation={[-Math.PI / 2, 0, 0]}
+        />
+      </group>
 
       {def.terminals.map((t) => (
         <Terminal
