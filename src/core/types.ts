@@ -17,7 +17,8 @@ export type ComponentType =
   | 'transformer1ph'
   | 'voltmeter'
   | 'ammeter'
-  | 'lampLoad';
+  | 'lampLoad'
+  | 'rheostat';
 
 export interface TerminalDef {
   name: string;
@@ -240,6 +241,9 @@ export interface ChartSeriesSpec {
   yColumn: string;
   label: string;
   color?: string;
+  dashed?: boolean;
+  opacity?: number;
+  showPoints?: boolean;
 }
 
 export interface ChartReferenceLine {

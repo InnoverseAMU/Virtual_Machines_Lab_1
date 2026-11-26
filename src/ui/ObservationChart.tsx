@@ -222,10 +222,17 @@ export function ObservationChart({
       {seriesData.length > 1 && (
         <div className="mb-1 flex flex-wrap gap-2 text-[10px]">
           {seriesData.map((s) => (
-            <span key={s.yColumn} className="inline-flex items-center gap-1">
+            <span
+              key={s.yColumn}
+              className="inline-flex items-center gap-1"
+              style={{ opacity: s.opacity ?? 1 }}
+            >
               <span
                 className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: s.color }}
+                style={{
+                  backgroundColor: s.dashed ? 'transparent' : s.color,
+                  border: s.dashed ? `1.5px dashed ${s.color}` : undefined,
+                }}
               />
               <span style={{ color: 'var(--vml-text-muted)' }}>{s.label}</span>
             </span>
@@ -394,25 +401,28 @@ export function ObservationChart({
                   d={pathD}
                   fill="none"
                   stroke={s.color}
-                  strokeWidth="2"
+                  strokeWidth={s.dashed ? '1.35' : '2'}
+                  strokeDasharray={s.dashed ? '4 3' : undefined}
+                  strokeOpacity={s.opacity ?? 1}
                   strokeLinecap="round"
                 />
               )}
-              {svgPts.map((pt) => (
-                <circle
-                  key={`${s.yColumn}_${pt.sno}`}
-                  cx={pt.x}
-                  cy={pt.y}
-                  r="3.2"
-                  fill={s.color}
-                  stroke="var(--vml-page-bg)"
-                  strokeWidth="1.2"
-                >
-                  <title>
-                    #{pt.sno} {s.label}: {pt.rawX.toFixed(1)}, {pt.rawY.toFixed(1)}
-                  </title>
-                </circle>
-              ))}
+              {s.showPoints !== false &&
+                svgPts.map((pt) => (
+                  <circle
+                    key={`${s.yColumn}_${pt.sno}`}
+                    cx={pt.x}
+                    cy={pt.y}
+                    r="3.2"
+                    fill={s.color}
+                    stroke="var(--vml-page-bg)"
+                    strokeWidth="1.2"
+                  >
+                    <title>
+                      #{pt.sno} {s.label}: {pt.rawX.toFixed(1)}, {pt.rawY.toFixed(1)}
+                    </title>
+                  </circle>
+                ))}
             </g>
           );
         })}

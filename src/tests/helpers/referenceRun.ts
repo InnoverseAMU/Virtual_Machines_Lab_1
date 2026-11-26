@@ -357,6 +357,144 @@ const DEFAULT_PROCEDURES: Record<
       };
     },
   },
+  'ex3.4': {
+    runStage: ({ experiment, stageIndex, seed, gains }) => {
+      const stage = getStage(experiment, stageIndex);
+      const comps = getStageComponents(experiment, stage);
+      const wires = wiresFromNetlist(
+        stage.acceptedNetlists[0],
+        collectInternalLinks(comps),
+        comps,
+      );
+
+      if (stageIndex === 0) {
+        const knob = findVariacForTargetV1(
+          experiment,
+          wires,
+          stage.physicsParams.V1rated ?? 230,
+          0,
+          gains,
+          { stageIndex, seed, meterId: 'vp', knobControlId: 'va.knob' },
+        );
+        const controls: ControlValues = {
+          'sup.switch': true,
+          'va.knob': knob,
+        };
+        const { output } = evaluateExperimentPhysics(
+          experiment,
+          wires,
+          controls,
+          gains,
+          { stageIndex, seed },
+        );
+        return [captureObservationRow(stage, output, controls, 1, 'pol_1')];
+      }
+
+      // Stage 2: no-load + 6 loaded steps up to ~42 A while holding V1 ~ 230 V
+      const loadPoints: Array<{
+        lampsOn: boolean;
+        lamps: number;
+        rheoOn: boolean;
+        R: number;
+      }> = [
+        { lampsOn: false, lamps: 0, rheoOn: false, R: 100 },
+        { lampsOn: false, lamps: 0, rheoOn: true, R: 20 },
+        { lampsOn: false, lamps: 0, rheoOn: true, R: 10 },
+        { lampsOn: false, lamps: 0, rheoOn: true, R: 5 },
+        { lampsOn: true, lamps: 6, rheoOn: true, R: 6 },
+        { lampsOn: false, lamps: 0, rheoOn: true, R: 3.2 },
+        { lampsOn: true, lamps: 3, rheoOn: true, R: 3.0 },
+      ];
+
+      return loadPoints.map((pt, idx) => {
+        const baseControls: ControlValues = {
+          'sup.switch': true,
+          'va.knob': 230,
+          'wmA.iRange': 20,
+          'wmB.iRange': 40,
+          'lamps.switch': pt.lampsOn,
+          'lamps.lamps': pt.lamps,
+          'rheostat.switch': pt.rheoOn,
+          'rheostat.R': pt.R,
+        };
+        const knob = findVariacForTargetV1(
+          experiment,
+          wires,
+          stage.physicsParams.V1rated ?? 230,
+          pt.lamps,
+          gains,
+          {
+            stageIndex,
+            seed,
+            meterId: 'vp',
+            knobControlId: 'va.knob',
+            loadControlId: 'lamps.lamps',
+            baseControls,
+          },
+        );
+        const controls: ControlValues = {
+          ...baseControls,
+          'va.knob': knob,
+        };
+        const { output } = evaluateExperimentPhysics(
+          experiment,
+          wires,
+          controls,
+          gains,
+          { stageIndex, seed },
+        );
+        return captureObservationRow(stage, output, controls, idx + 1, `par_${idx + 1}`);
+      });
+    },
+    computeAnswers: (rowsByStage, experiment) => {
+      const loadStage = getStage(experiment, 1);
+      const rows = rowsByStage[loadStage.id] ?? [];
+
+      const noLoad = rows.find((r) => getRowNumber(r, 'il') < 0.1)!;
+      const circulatingCurrentA =
+        (getRowNumber(noLoad, 'ia') + getRowNumber(noLoad, 'ib')) / 2;
+
+      const iArated = loadStage.physicsParams.IArated ?? 17.39;
+      const iBrated = loadStage.physicsParams.IBrated ?? 26.09;
+
+      // Determine which transformer reaches rating first and interpolate IL
+      const sorted = [...rows].sort(
+        (a, b) => getRowNumber(a, 'il') - getRowNumber(b, 'il'),
+      );
+      const topRow = sorted[sorted.length - 1];
+      const fracA = getRowNumber(topRow, 'ia') / iArated;
+      const fracB = getRowNumber(topRow, 'ib') / iBrated;
+      const firstTransformer = fracB >= fracA ? 'B' : 'A';
+      const targetCol = firstTransformer === 'B' ? 'ib' : 'ia';
+      const targetRated = firstTransformer === 'B' ? iBrated : iArated;
+
+      let firstRatedIL = getRowNumber(topRow, 'il');
+      for (let i = 1; i < sorted.length; i++) {
+        const y0 = getRowNumber(sorted[i - 1], targetCol);
+        const y1 = getRowNumber(sorted[i], targetCol);
+        const x0 = getRowNumber(sorted[i - 1], 'il');
+        const x1 = getRowNumber(sorted[i], 'il');
+        if (y1 >= targetRated && y1 > y0) {
+          firstRatedIL = x0 + ((targetRated - y0) / (y1 - y0)) * (x1 - x0);
+          break;
+        }
+        if (i === sorted.length - 1 && y1 > y0) {
+          firstRatedIL = x0 + ((targetRated - y0) / (y1 - y0)) * (x1 - x0);
+        }
+      }
+
+      const bShareRatio =
+        getRowNumber(topRow, 'ib') / Math.max(0.01, getRowNumber(topRow, 'il'));
+      const proportionalShare = Math.abs(bShareRatio - 0.6) <= 0.015 ? 'yes' : 'no';
+
+      return {
+        circulatingCurrentA,
+        firstRatedIL,
+        firstTransformer,
+        proportionalShare,
+      };
+    },
+  },
 };
 
 /**

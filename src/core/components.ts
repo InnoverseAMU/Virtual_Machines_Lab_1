@@ -63,6 +63,13 @@ export const COMPONENT_DEFS: Record<ComponentType, ComponentTypeDef> = {
       { name: 'B', label: 'Load B', localPos: [0.26, 0.18, 0.47] },
     ],
   },
+  rheostat: {
+    type: 'rheostat',
+    terminals: [
+      { name: 'A', label: 'Rheostat A', localPos: [-0.26, 0.16, 0.42] },
+      { name: 'B', label: 'Rheostat B', localPos: [0.26, 0.16, 0.42] },
+    ],
+  },
 };
 
 export function getComponentDef(type: ComponentType): ComponentTypeDef {

@@ -7,6 +7,7 @@ import { Terminal } from './Terminal';
 
 interface LampBankProps {
   instance: ComponentInstance;
+  stepsControlId?: string;
   lampStates: boolean[];
   supplyOn: boolean;
   loadConnected: boolean;
@@ -16,6 +17,7 @@ interface LampBankProps {
 
 export function LampBank({
   instance,
+  stepsControlId = 'ld.lamps',
   lampStates,
   supplyOn,
   loadConnected,
@@ -87,7 +89,7 @@ export function LampBank({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (controlsLocked) return;
-                  toggleLampIndex(idx);
+                  toggleLampIndex(idx, stepsControlId);
                 }}
                 onPointerOver={(e) => {
                   e.stopPropagation();

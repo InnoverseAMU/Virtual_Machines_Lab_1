@@ -146,7 +146,10 @@ export function computeWireCurrentFlows(
     Math.abs(out.I1 ?? out.Ip ?? out.Io ?? out.Isc ?? out.I ?? 0.5),
   );
   const secondaryI = Math.abs(
-    out.I2 ?? out.Is ?? (out.Isc !== undefined ? Math.abs(out.Isc) * 2 : 0),
+    out.I2 ??
+      out.IL ??
+      out.Is ??
+      (out.Isc !== undefined ? Math.abs(out.Isc) * 2 : 0),
   );
 
   const primaryAdj = new Map<TerminalId, DirectedEdge[]>();
@@ -219,8 +222,13 @@ export function computeWireCurrentFlows(
         );
       }
     } else if (comp.type === 'lampLoad') {
-      const lamps = Number(controls[`${comp.id}.lamps`] ?? controls['ld.lamps'] ?? 0);
-      if (lamps > 0) {
+      const swOk =
+        controls[`${comp.id}.switch`] === undefined ||
+        Boolean(controls[`${comp.id}.switch`]);
+      const lamps = Number(
+        controls[`${comp.id}.lamps`] ?? controls['ld.lamps'] ?? 0,
+      );
+      if (swOk && lamps > 0) {
         addBidirectionalInternalEdge(
           secondaryAdj,
           `${comp.id}.A`,
@@ -228,6 +236,15 @@ export function computeWireCurrentFlows(
         );
         addBidirectionalInternalEdge(
           primaryAdj,
+          `${comp.id}.A`,
+          `${comp.id}.B`,
+        );
+      }
+    } else if (comp.type === 'rheostat') {
+      const swOk = Boolean(controls[`${comp.id}.switch`]);
+      if (swOk) {
+        addBidirectionalInternalEdge(
+          secondaryAdj,
           `${comp.id}.A`,
           `${comp.id}.B`,
         );
@@ -363,15 +380,34 @@ export function computeWireCurrentFlows(
     }
   }
 
-  // Trace secondary loop (e.g. tx.S1 -> am -> ld -> tx.S2, or tx.S1 -> tx.S2 short in Exp 3.2 SC)
-  if (secondaryI > 0.005 && transformers.length === 1) {
-    const txComp = transformers[0];
-    const s1: TerminalId = `${txComp.id}.S1`;
-    const s2: TerminalId = `${txComp.id}.S2`;
-    const lvIsPrimary =
-      netGraph.areConnected(s2, 'sup.N') || netGraph.areConnected(s1, 'va.OUT_P');
-    if (!lvIsPrimary) {
-      markShortestFlowPath(secondaryAdj, s1, s2, secondaryI, flows);
+  // Trace secondary loop (e.g. tx.S1 -> am -> ld -> tx.S2, or parallel transformers -> load)
+  if (secondaryI > 0.005) {
+    if (transformers.length === 1) {
+      const txComp = transformers[0];
+      const s1: TerminalId = `${txComp.id}.S1`;
+      const s2: TerminalId = `${txComp.id}.S2`;
+      const lvIsPrimary =
+        netGraph.areConnected(s2, 'sup.N') || netGraph.areConnected(s1, 'va.OUT_P');
+      if (!lvIsPrimary) {
+        markShortestFlowPath(secondaryAdj, s1, s2, secondaryI, flows);
+      }
+    } else if (transformers.length > 1) {
+      for (const txComp of transformers) {
+        markShortestFlowPath(
+          secondaryAdj,
+          `${txComp.id}.S1`,
+          `${txComp.id}.S2`,
+          secondaryI / transformers.length,
+          flows,
+        );
+        markShortestFlowPath(
+          secondaryAdj,
+          `${txComp.id}.S2`,
+          `${txComp.id}.S1`,
+          secondaryI / transformers.length,
+          flows,
+        );
+      }
     }
   }
 

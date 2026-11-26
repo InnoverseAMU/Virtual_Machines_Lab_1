@@ -118,7 +118,7 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
 
   setControlValue: (id, value) => {
     const state = get();
-    if (id.endsWith('.switch') && value === true) {
+    if (id === 'sup.switch' && value === true) {
       const knobEntries = Object.entries(state.values).filter(([k]) =>
         k.endsWith('.knob'),
       );

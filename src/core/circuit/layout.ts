@@ -9,6 +9,7 @@ export const COMPONENT_FOOTPRINTS: Record<ComponentType, [number, number, number
   voltmeter: [0.96, 0.7, 0.92],
   ammeter: [0.96, 0.7, 0.92],
   lampLoad: [1.54, 0.98, 1.02],
+  rheostat: [1.34, 0.86, 0.94],
 };
 
 export interface SpacingViolation {
