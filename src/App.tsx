@@ -255,8 +255,8 @@ export function App() {
     if (leavingWireStep || crossingPastCondition || crossingStage) {
       setControlValue('sup.switch', false);
       for (const ctrl of currentStage.controls) {
-        if (ctrl.kind === 'knob' || ctrl.kind === 'steps') {
-          setControlValue(ctrl.id, 0);
+        if (ctrl.kind === 'knob' || ctrl.kind === 'steps' || ctrl.kind === 'switch') {
+          setControlValue(ctrl.id, ctrl.defaultValue);
         }
       }
       clearMcbTrip();

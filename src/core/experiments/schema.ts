@@ -32,6 +32,7 @@ const ComponentTypeSchema = z.enum([
   'voltmeter',
   'ammeter',
   'lampLoad',
+  'rheostat',
 ]);
 
 const ComponentParamValueSchema = z.union([
@@ -200,6 +201,9 @@ const ChartSpecSchema = z.object({
         yColumn: z.string().min(1),
         label: z.string().min(1),
         color: z.string().optional(),
+        dashed: z.boolean().optional(),
+        opacity: z.number().min(0).max(1).optional(),
+        showPoints: z.boolean().optional(),
       }),
     )
     .min(1),

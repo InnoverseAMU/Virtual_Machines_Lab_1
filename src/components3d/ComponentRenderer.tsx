@@ -9,6 +9,7 @@ import { useControlsStore } from '../stores/controlsStore';
 import { AcSupply } from './AcSupply';
 import { AnalogMeter } from './AnalogMeter';
 import { LampBank } from './LampBank';
+import { Rheostat } from './Rheostat';
 import { Transformer } from './Transformer';
 import { Variac } from './Variac';
 import { Wattmeter } from './Wattmeter';
@@ -167,14 +168,49 @@ export function ComponentRenderer({
       );
     }
     case 'lampLoad': {
-      const swSupply = Boolean(values['sup.switch']);
+      const stepsDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'steps',
+      );
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const swSupply =
+        Boolean(values['sup.switch']) && (swDef ? Boolean(values[swDef.id]) : true);
       return (
         <LampBank
           instance={instance}
+          stepsControlId={stepsDef?.id ?? `${instance.id}.lamps`}
           lampStates={lampStates}
           supplyOn={swSupply}
           loadConnected={Boolean(connectionState?.loadConnected)}
-          v2={labOutput?.outputs?.V2 ?? 0}
+          v2={labOutput?.outputs?.VL ?? labOutput?.outputs?.V2 ?? 0}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'rheostat': {
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const rDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const swId = swDef?.id ?? `${instance.id}.switch`;
+      const rId = rDef?.id ?? `${instance.id}.R`;
+      const minR = rDef?.kind === 'knob' ? rDef.min : 3;
+      const maxR = rDef?.kind === 'knob' ? rDef.max : 100;
+      const stepR = rDef?.kind === 'knob' ? rDef.step : 0.5;
+      const defaultR = rDef?.kind === 'knob' ? rDef.defaultValue : 100;
+      return (
+        <Rheostat
+          instance={instance}
+          switchControlId={swId}
+          resistanceControlId={rId}
+          switchOn={Boolean(values[swId])}
+          resistance={Number(values[rId] ?? defaultR)}
+          minR={minR}
+          maxR={maxR}
+          stepR={stepR}
           controlsLocked={controlsLocked}
         />
       );
