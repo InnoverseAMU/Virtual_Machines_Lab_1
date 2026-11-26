@@ -154,6 +154,7 @@ export interface LearnStep {
   title: string;
   why: string;
   connectTerminals?: [TerminalId, TerminalId][];
+  disconnectTerminals?: [TerminalId, TerminalId][];
   completionCondition?: LearnStepCondition;
 }
 

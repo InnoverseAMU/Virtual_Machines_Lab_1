@@ -11,6 +11,7 @@ export function Transformer({ instance }: TransformerProps) {
   const def = getComponentDef(instance.type);
   const pPlate = String(instance.params.pPlate ?? 'PRIMARY 230 V');
   const sPlate = String(instance.params.sPlate ?? 'SECONDARY 115 V');
+  const titlePlate = String(instance.params.titlePlate ?? 'TRANSFORMER 2 kVA');
 
   return (
     <group position={instance.position}>
@@ -39,7 +40,7 @@ export function Transformer({ instance }: TransformerProps) {
       </mesh>
 
       <LabelPlate
-        text="TRANSFORMER 2 kVA"
+        text={titlePlate}
         subtext="230 V / 115 V · 50 Hz"
         width={0.94}
         height={0.18}

@@ -18,6 +18,7 @@ interface WiringState {
 
   // Scripted Learn / Observe helpers (bypass manual wiring lock for scripted actions only)
   addTutorialWire: (a: TerminalId, b: TerminalId, stepIndex: number) => void;
+  removeTutorialWirePair: (a: TerminalId, b: TerminalId) => void;
   removeTutorialWiresFromStep: (minStepIndex: number) => void;
   setObserveWires: (pairs: WireEndpointPair[]) => void;
   clearAllWiresScripted: () => void;
@@ -173,6 +174,16 @@ export const useWiringStore = create<WiringState>((set, get) => ({
       ],
       selectedTerminal: null,
     });
+  },
+
+  removeTutorialWirePair: (a, b) => {
+    useControlsStore.getState().clearMcbTrip();
+    set((state) => ({
+      wires: state.wires.filter(
+        (w) => !((w.a === a && w.b === b) || (w.a === b && w.b === a)),
+      ),
+      selectedTerminal: null,
+    }));
   },
 
   removeTutorialWiresFromStep: (minStepIndex) => {

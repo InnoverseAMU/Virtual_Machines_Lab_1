@@ -226,6 +226,137 @@ const DEFAULT_PROCEDURES: Record<
       };
     },
   },
+  'ex3.3': {
+    runStage: ({ experiment, stageIndex, seed, gains }) => {
+      const stage = getStage(experiment, stageIndex);
+      const comps = getStageComponents(experiment, stage);
+      const wires = wiresFromNetlist(
+        stage.acceptedNetlists[0],
+        collectInternalLinks(comps),
+        comps,
+      );
+
+      if (stageIndex === 0) {
+        // Stage 1: Primary parallel at Vp = 230 V with series-opposition check
+        const knobP = findVariacForTargetV1(
+          experiment,
+          wires,
+          stage.physicsParams.V1rated ?? 230,
+          0,
+          gains,
+          { stageIndex, seed, meterId: 'vp', knobControlId: 'vaP.knob' },
+        );
+        const controls: ControlValues = {
+          'sup.switch': true,
+          'vaP.knob': knobP,
+        };
+        const { output } = evaluateExperimentPhysics(
+          experiment,
+          wires,
+          controls,
+          gains,
+          { stageIndex, seed },
+        );
+        return [captureObservationRow(stage, output, controls, 1, 'pri_1')];
+      }
+
+      // Stage 2: Secondary loop at 25%, 50%, 75%, 100% of rated 17.39 A
+      const knobP = findVariacForTargetV1(
+        experiment,
+        wires,
+        stage.physicsParams.V1rated ?? 230,
+        0,
+        gains,
+        { stageIndex, seed, meterId: 'vp', knobControlId: 'vaP.knob' },
+      );
+      const iRated = stage.physicsParams.I2rated ?? 17.39;
+      const targets = [0.25, 0.5, 0.75, 1.0].map((f) => f * iRated);
+
+      return targets.map((targetI, idx) => {
+        const baseControls: ControlValues = {
+          'sup.switch': true,
+          'vaP.knob': knobP,
+          'vaS.knob': 0,
+          'ws.vRange': 15,
+          'ws.iRange': 20,
+        };
+        const knobS = findVariacForTargetV1(
+          experiment,
+          wires,
+          targetI,
+          0,
+          gains,
+          {
+            stageIndex,
+            seed,
+            meterId: 'as',
+            knobControlId: 'vaS.knob',
+            baseControls,
+          },
+        );
+        const controls: ControlValues = {
+          ...baseControls,
+          'vaS.knob': knobS,
+        };
+        const { output } = evaluateExperimentPhysics(
+          experiment,
+          wires,
+          controls,
+          gains,
+          { stageIndex, seed },
+        );
+        return captureObservationRow(stage, output, controls, idx + 1, `sec_${idx + 1}`);
+      });
+    },
+    computeAnswers: (rowsByStage, experiment) => {
+      const priStage = getStage(experiment, 0);
+      const secStage = getStage(experiment, 1);
+      const priRows = rowsByStage[priStage.id] ?? [];
+      const secRows = rowsByStage[secStage.id] ?? [];
+
+      const pri = priRows[0];
+      const wp = getRowNumber(pri, 'wp');
+      const Pi = wp / 2;
+
+      const iRated = secStage.physicsParams.I2rated ?? 17.39;
+      const vRated = secStage.physicsParams.V2rated ?? 115;
+
+      let sumR2 = 0;
+      let sumX2 = 0;
+      let sumPc = 0;
+      for (const r of secRows) {
+        const vs = getRowNumber(r, 'vs');
+        const is = getRowNumber(r, 'is');
+        const ws = getRowNumber(r, 'ws');
+        const z2 = vs / 2 / is;
+        const r2 = ws / 2 / (is * is);
+        const x2 = Math.sqrt(Math.max(0, z2 * z2 - r2 * r2));
+        const pc = (iRated / is) ** 2 * (ws / 2);
+        sumR2 += r2;
+        sumX2 += x2;
+        sumPc += pc;
+      }
+
+      const n = secRows.length;
+      const R2 = sumR2 / n;
+      const X2 = sumX2 / n;
+      const Pc = sumPc / n;
+
+      const VR_lag = (iRated / vRated) * (R2 * 0.8 + X2 * 0.6) * 100;
+      const VR_lead = (iRated / vRated) * (R2 * 0.8 - X2 * 0.6) * 100;
+      const xMaxEff = Math.sqrt(Pi / Pc);
+
+      return {
+        Pi,
+        R2,
+        X2,
+        Pc,
+        VR_lag,
+        VR_lead,
+        xMaxEff,
+      };
+    },
+  },
 };
 
 /**
