@@ -42,26 +42,27 @@ function savePref(key: string, value: string): void {
   }
 }
 
-interface StoredProgress {
+export interface StoredProgress {
   attempts: Record<string, number>;
   completedExperiments: string[];
   usedSolutionByExperiment: Record<string, boolean>;
   learnCompleted: Record<string, boolean>;
   runCompleted: Record<string, boolean>;
+  runPractised: Record<string, boolean>;
 }
 
-function loadProgress(): StoredProgress {
+export function parseStoredProgress(raw: string | null): StoredProgress {
+  if (!raw) {
+    return {
+      attempts: {},
+      completedExperiments: [],
+      usedSolutionByExperiment: {},
+      learnCompleted: {},
+      runCompleted: {},
+      runPractised: {},
+    };
+  }
   try {
-    const raw = window.localStorage.getItem(PROGRESS_STORAGE_KEY);
-    if (!raw) {
-      return {
-        attempts: {},
-        completedExperiments: [],
-        usedSolutionByExperiment: {},
-        learnCompleted: {},
-        runCompleted: {},
-      };
-    }
     const parsed = JSON.parse(raw) as Partial<StoredProgress>;
     return {
       attempts:
@@ -84,6 +85,10 @@ function loadProgress(): StoredProgress {
         parsed.runCompleted && typeof parsed.runCompleted === 'object'
           ? parsed.runCompleted
           : {},
+      runPractised:
+        parsed.runPractised && typeof parsed.runPractised === 'object'
+          ? parsed.runPractised
+          : {},
     };
   } catch {
     return {
@@ -92,7 +97,17 @@ function loadProgress(): StoredProgress {
       usedSolutionByExperiment: {},
       learnCompleted: {},
       runCompleted: {},
+      runPractised: {},
     };
+  }
+}
+
+function loadProgress(): StoredProgress {
+  if (typeof window === 'undefined') return parseStoredProgress(null);
+  try {
+    return parseStoredProgress(window.localStorage.getItem(PROGRESS_STORAGE_KEY));
+  } catch {
+    return parseStoredProgress(null);
   }
 }
 
@@ -105,7 +120,7 @@ function saveProgress(progress: StoredProgress): void {
 }
 
 export type AppScreen = 'picker' | 'mode' | 'lab';
-export type LabMode = 'self' | 'learn';
+export type LabMode = 'self' | 'learn' | 'observe';
 
 let rowCounter = 0;
 
@@ -118,6 +133,7 @@ interface SessionState {
   usedSolutionByExperiment: Record<string, boolean>;
   learnCompleted: Record<string, boolean>;
   runCompleted: Record<string, boolean>;
+  runPractised: Record<string, boolean>;
 
   // Self mode per-run state (never persisted)
   hintLevel: number;
@@ -131,6 +147,10 @@ interface SessionState {
   runRegulationInput: string;
   runMaxEffLoadInput: string;
   runCheckResult: RunCheckResult | null;
+
+  // Observe mode net highlight (transient, never persisted)
+  highlightedNetIndex: number | null;
+  highlightedNetPinned: boolean;
 
   // Learn mode per-run state (never persisted mid-lesson)
   learnStepIndex: number;
@@ -173,6 +193,9 @@ interface SessionState {
   submitRunAnswers: () => RunCheckResult;
   clearRunCheckResult: () => void;
 
+  setHighlightedNetIndex: (index: number | null, pinned?: boolean) => void;
+  clearHighlightedNet: () => void;
+
   setLearnStepIndex: (index: number) => void;
   ackLearnReading: () => void;
   resetLearnAck: () => void;
@@ -196,6 +219,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   usedSolutionByExperiment: initialProgress.usedSolutionByExperiment,
   learnCompleted: initialProgress.learnCompleted,
   runCompleted: initialProgress.runCompleted,
+  runPractised: initialProgress.runPractised,
 
   hintLevel: 0,
   usedSolutionInRun: false,
@@ -207,6 +231,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   runRegulationInput: '',
   runMaxEffLoadInput: '',
   runCheckResult: null,
+
+  highlightedNetIndex: null,
+  highlightedNetPinned: false,
 
   learnStepIndex: 0,
   learnNoLoadAck: false,
@@ -236,6 +263,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       runRegulationInput: '',
       runMaxEffLoadInput: '',
       runCheckResult: null,
+      highlightedNetIndex: null,
+      highlightedNetPinned: false,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -278,6 +307,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       usedSolutionInRun,
       learnCompleted,
       runCompleted,
+      runPractised,
     } = get();
     const experiment = getExperiment(experimentId);
     const result = validateWiring(experiment, wires);
@@ -306,6 +336,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       usedSolutionByExperiment: nextUsedSolution,
       learnCompleted,
       runCompleted,
+      runPractised,
     });
 
     set({
@@ -401,6 +432,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   submitRunAnswers: () => {
     const {
       experimentId,
+      mode,
       observationRows,
       runRegulationInput,
       runMaxEffLoadInput,
@@ -409,6 +441,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       usedSolutionByExperiment,
       learnCompleted,
       runCompleted,
+      runPractised,
     } = get();
 
     const experiment = getExperiment(experimentId);
@@ -425,28 +458,51 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     );
 
     let nextRunCompleted = runCompleted;
+    let nextRunPractised = runPractised;
+
     if (result.passed) {
-      nextRunCompleted = {
-        ...runCompleted,
-        [experimentId]: true,
-      };
+      if (mode === 'observe') {
+        nextRunPractised = {
+          ...runPractised,
+          [experimentId]: true,
+        };
+      } else {
+        nextRunCompleted = {
+          ...runCompleted,
+          [experimentId]: true,
+        };
+      }
       saveProgress({
         attempts,
         completedExperiments,
         usedSolutionByExperiment,
         learnCompleted,
         runCompleted: nextRunCompleted,
+        runPractised: nextRunPractised,
       });
     }
 
     set({
       runCompleted: nextRunCompleted,
+      runPractised: nextRunPractised,
       runCheckResult: result,
     });
     return result;
   },
 
   clearRunCheckResult: () => set({ runCheckResult: null }),
+
+  setHighlightedNetIndex: (index, pinned = false) =>
+    set({
+      highlightedNetIndex: index,
+      highlightedNetPinned: index !== null && pinned,
+    }),
+
+  clearHighlightedNet: () =>
+    set({
+      highlightedNetIndex: null,
+      highlightedNetPinned: false,
+    }),
 
   setLearnStepIndex: (learnStepIndex) => set({ learnStepIndex }),
 
@@ -462,6 +518,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       usedSolutionByExperiment,
       learnCompleted,
       runCompleted,
+      runPractised,
     } = get();
     const nextLearnCompleted = {
       ...learnCompleted,
@@ -473,6 +530,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       usedSolutionByExperiment,
       learnCompleted: nextLearnCompleted,
       runCompleted,
+      runPractised,
     });
     set({
       learnCompleted: nextLearnCompleted,
@@ -513,6 +571,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       runRegulationInput: '',
       runMaxEffLoadInput: '',
       runCheckResult: null,
+      highlightedNetIndex: null,
+      highlightedNetPinned: false,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,

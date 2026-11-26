@@ -24,6 +24,7 @@ export function ObservationsPanel({
   controls,
   primaryEnergised,
 }: ObservationsPanelProps) {
+  const mode = useSessionStore((s) => s.mode);
   const observationRows = useSessionStore((s) => s.observationRows);
   const runRegulationInput = useSessionStore((s) => s.runRegulationInput);
   const runMaxEffLoadInput = useSessionStore((s) => s.runMaxEffLoadInput);
@@ -31,6 +32,8 @@ export function ObservationsPanel({
   const attempts = useSessionStore((s) => s.attempts);
   const hintLevel = useSessionStore((s) => s.hintLevel);
   const usedSolutionInRun = useSessionStore((s) => s.usedSolutionInRun);
+
+  const isObserveMode = mode === 'observe';
   const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
 
   const addObservationRow = useSessionStore((s) => s.addObservationRow);
@@ -319,42 +322,59 @@ export function ObservationsPanel({
           }}
         >
           {runCheckResult.passed ? (
-            <>
-              <div className="inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
-                Run Passed
-              </div>
-              <div className="font-bold">{experiment.title}</div>
-              <dl className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
-                <div>
-                  <dt style={{ color: 'var(--vml-text-muted)' }}>
-                    Wiring attempts
-                  </dt>
-                  <dd className="font-mono font-bold">
-                    {attempts[experiment.id] ?? 0}
-                  </dd>
+            isObserveMode ? (
+              <>
+                <div className="inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                  Pre-wired run passed
                 </div>
-                <div>
-                  <dt style={{ color: 'var(--vml-text-muted)' }}>Run result</dt>
-                  <dd className="font-mono font-bold text-emerald-400">
-                    Passed
-                  </dd>
+                <div className="font-bold">{experiment.title}</div>
+                <div
+                  className="text-[11px]"
+                  style={{ color: 'var(--vml-text-muted)' }}
+                >
+                  Mode: Observe (pre-wired) · Recorded under practised runs.
                 </div>
-                <div>
-                  <dt style={{ color: 'var(--vml-text-muted)' }}>Hints used</dt>
-                  <dd className="font-mono font-bold">
-                    {hintLevel > 0 ? `Yes (${hintLevel})` : 'No'}
-                  </dd>
+              </>
+            ) : (
+              <>
+                <div className="inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                  Run Passed
                 </div>
-                <div>
-                  <dt style={{ color: 'var(--vml-text-muted)' }}>
-                    Solution used
-                  </dt>
-                  <dd className="font-mono font-bold">
-                    {usedSolutionInRun ? 'Yes' : 'No'}
-                  </dd>
-                </div>
-              </dl>
-            </>
+                <div className="font-bold">{experiment.title}</div>
+                <dl className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                  <div>
+                    <dt style={{ color: 'var(--vml-text-muted)' }}>
+                      Wiring attempts
+                    </dt>
+                    <dd className="font-mono font-bold">
+                      {attempts[experiment.id] ?? 0}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: 'var(--vml-text-muted)' }}>
+                      Run result
+                    </dt>
+                    <dd className="font-mono font-bold text-emerald-400">
+                      Passed
+                    </dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: 'var(--vml-text-muted)' }}>Hints used</dt>
+                    <dd className="font-mono font-bold">
+                      {hintLevel > 0 ? `Yes (${hintLevel})` : 'No'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt style={{ color: 'var(--vml-text-muted)' }}>
+                      Solution used
+                    </dt>
+                    <dd className="font-mono font-bold">
+                      {usedSolutionInRun ? 'Yes' : 'No'}
+                    </dd>
+                  </div>
+                </dl>
+              </>
+            )
           ) : (
             <>
               <div className="font-bold text-amber-400">

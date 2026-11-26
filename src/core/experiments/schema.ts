@@ -130,6 +130,15 @@ export const ExperimentDefSchema = z.object({
   netCategoryKeys: z
     .array(z.enum(['supply', 'primary', 'wattmeter', 'secondary', 'load']))
     .optional(),
+  netPurposes: z
+    .object({
+      supply: z.string().min(1).optional(),
+      primary: z.string().min(1).optional(),
+      wattmeter: z.string().min(1).optional(),
+      secondary: z.string().min(1).optional(),
+      load: z.string().min(1).optional(),
+    })
+    .optional(),
   faultPatterns: z.array(FaultPatternSchema),
   controls: z.array(ControlDefSchema),
   physicsModel: z.string().min(1),

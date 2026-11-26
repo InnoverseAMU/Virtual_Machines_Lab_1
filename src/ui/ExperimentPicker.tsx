@@ -11,6 +11,7 @@ export function ExperimentPicker() {
   );
   const learnCompleted = useSessionStore((s) => s.learnCompleted);
   const runCompleted = useSessionStore((s) => s.runCompleted);
+  const runPractised = useSessionStore((s) => s.runPractised);
   const selectExperiment = useSessionStore((s) => s.selectExperiment);
   const goToScreen = useSessionStore((s) => s.goToScreen);
 
@@ -23,6 +24,7 @@ export function ExperimentPicker() {
     const isCompleted = completedExperiments.includes(exp.id);
     const isLearnDone = Boolean(learnCompleted[exp.id]);
     const isRunDone = Boolean(runCompleted[exp.id]);
+    const isObserveDone = Boolean(runPractised[exp.id]);
     const attemptCount = attempts[exp.id] ?? 0;
     const usedSol = Boolean(usedSolutionByExperiment[exp.id]);
 
@@ -118,6 +120,17 @@ export function ExperimentPicker() {
               {isRunDone && (
                 <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
                   Run completed
+                </span>
+              )}
+              {isObserveDone && (
+                <span
+                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  Run practised (pre-wired)
                 </span>
               )}
               {usedSol && (

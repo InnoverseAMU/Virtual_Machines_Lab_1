@@ -16,9 +16,10 @@ interface WiringState {
   clearAllWires: (supplyOn: boolean) => void;
   setSolutionWires: (pairs: WireEndpointPair[]) => void;
 
-  // Scripted Learn-mode helpers (bypass manual wiring lock for scripted steps only)
+  // Scripted Learn / Observe helpers (bypass manual wiring lock for scripted actions only)
   addTutorialWire: (a: TerminalId, b: TerminalId, stepIndex: number) => void;
   removeTutorialWiresFromStep: (minStepIndex: number) => void;
+  setObserveWires: (pairs: WireEndpointPair[]) => void;
   clearAllWiresScripted: () => void;
 }
 
@@ -39,8 +40,16 @@ export const useWiringStore = create<WiringState>((set, get) => ({
   clearSelectedTerminal: () => set({ selectedTerminal: null }),
 
   clickTerminal: (id, supplyOn) => {
-    // Manual wiring is disabled in Learn mode
-    if (useSessionStore.getState().mode === 'learn') return;
+    const mode = useSessionStore.getState().mode;
+    if (mode === 'learn') return;
+    if (mode === 'observe') {
+      useSessionStore.getState().pushToast({
+        id: 'observe-locked',
+        severity: 'info',
+        message: 'Wires are locked in Observe mode.',
+      });
+      return;
+    }
 
     const check = canModifyWiring(supplyOn);
     if (!check.allowed) {
@@ -88,7 +97,16 @@ export const useWiringStore = create<WiringState>((set, get) => ({
   },
 
   removeWire: (wireId, supplyOn) => {
-    if (useSessionStore.getState().mode === 'learn') return;
+    const mode = useSessionStore.getState().mode;
+    if (mode === 'learn') return;
+    if (mode === 'observe') {
+      useSessionStore.getState().pushToast({
+        id: 'observe-locked',
+        severity: 'info',
+        message: 'Wires are locked in Observe mode.',
+      });
+      return;
+    }
 
     const check = canModifyWiring(supplyOn);
     if (!check.allowed) {
@@ -107,6 +125,9 @@ export const useWiringStore = create<WiringState>((set, get) => ({
   },
 
   clearAllWires: (supplyOn) => {
+    const mode = useSessionStore.getState().mode;
+    if (mode === 'observe' || mode === 'learn') return;
+
     const check = canModifyWiring(supplyOn);
     if (!check.allowed) {
       useSessionStore.getState().pushToast({
@@ -162,6 +183,19 @@ export const useWiringStore = create<WiringState>((set, get) => ({
       ),
       selectedTerminal: null,
     }));
+  },
+
+  setObserveWires: (pairs) => {
+    useControlsStore.getState().clearMcbTrip();
+    set({
+      wires: pairs.map(([a, b]) => ({
+        id: makeWireId(a, b),
+        a,
+        b,
+        tutorialStep: 0,
+      })),
+      selectedTerminal: null,
+    });
   },
 
   clearAllWiresScripted: () => {

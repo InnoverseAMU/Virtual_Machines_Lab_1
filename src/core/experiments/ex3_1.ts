@@ -120,6 +120,16 @@ export const ex3_1: ExperimentDef = {
     'load',
     'secondary',
   ],
+  netPurposes: {
+    supply: 'Supply: feeds 230 V AC mains into the autotransformer input.',
+    primary:
+      'Primary: links the common neutral return and feeds the 230 V primary winding and primary voltmeter.',
+    wattmeter:
+      'Wattmeter: connects the autotransformer output to M and ties V1 to M to measure input power.',
+    secondary:
+      'Secondary: brings the 115 V winding across the secondary voltmeter and into the ammeter.',
+    load: 'Load: connects the ammeter output in series with the 12-lamp resistive load bank.',
+  },
   faultPatterns: [
     // Six core fault patterns (Spec Section 5)
     {

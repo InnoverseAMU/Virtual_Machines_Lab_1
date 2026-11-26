@@ -15,6 +15,8 @@ interface WireMeshProps {
   wireIndexInNet: number;
   readOnly?: boolean;
   ghost?: boolean;
+  highlighted?: boolean;
+  dimmed?: boolean;
 }
 
 export function WireMesh({
@@ -24,6 +26,8 @@ export function WireMesh({
   wireIndexInNet,
   readOnly = false,
   ghost = false,
+  highlighted = false,
+  dimmed = false,
 }: WireMeshProps) {
   const [hovered, setHovered] = useState(false);
   const meshRef = useRef<THREE.Mesh>(null);
@@ -31,7 +35,10 @@ export function WireMesh({
   const removeWire = useWiringStore((s) => s.removeWire);
   const supplyOn = useControlsStore((s) => s.supplyOn);
   const mode = useSessionStore((s) => s.mode);
-  const locked = readOnly || ghost || mode === 'learn';
+  const isLearnMode = mode === 'learn';
+  const isObserveMode = mode === 'observe';
+  const blockClick = readOnly || ghost || isLearnMode;
+  const cursorLocked = blockClick || isObserveMode;
 
   const startPos = useMemo(
     () => getTerminalWorldPos(components, wire.a),
@@ -118,19 +125,19 @@ export function WireMesh({
       geometry={geometry}
       castShadow={!ghost}
       onClick={(e) => {
-        if (locked) return;
+        if (blockClick) return;
         e.stopPropagation();
         removeWire(wire.id, supplyOn);
-        document.body.style.cursor = 'auto';
+        document.body.style.cursor = cursorLocked ? 'default' : 'auto';
       }}
       onPointerOver={(e) => {
-        if (locked) return;
+        if (blockClick) return;
         e.stopPropagation();
-        setHovered(true);
-        document.body.style.cursor = 'pointer';
+        setHovered(!isObserveMode);
+        document.body.style.cursor = cursorLocked ? 'default' : 'pointer';
       }}
       onPointerOut={(e) => {
-        if (locked) return;
+        if (blockClick) return;
         e.stopPropagation();
         setHovered(false);
         document.body.style.cursor = 'auto';
@@ -139,13 +146,17 @@ export function WireMesh({
       <meshStandardMaterial
         ref={matRef}
         color={ghost ? '#38bdf8' : hovered ? '#ffffff' : baseColor}
-        emissive={ghost ? '#0ea5e9' : hovered ? baseColor : '#000000'}
-        emissiveIntensity={ghost ? 0.5 : hovered ? 0.6 : 0}
+        emissive={
+          ghost ? '#0ea5e9' : highlighted || hovered ? baseColor : '#000000'
+        }
+        emissiveIntensity={
+          ghost ? 0.5 : highlighted ? 0.75 : hovered ? 0.6 : 0
+        }
         roughness={0.4}
         metalness={0.1}
-        transparent={ghost}
-        opacity={ghost ? 0.65 : 1}
-        depthWrite={!ghost}
+        transparent={ghost || dimmed}
+        opacity={ghost ? 0.65 : dimmed ? 0.16 : 1}
+        depthWrite={!ghost && !dimmed}
       />
     </mesh>
   );

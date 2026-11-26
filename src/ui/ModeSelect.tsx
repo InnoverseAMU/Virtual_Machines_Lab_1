@@ -1,29 +1,18 @@
 import { EXPERIMENT_SUMMARIES, getExperiment } from '../core/experiments/registry';
-import { useControlsStore } from '../stores/controlsStore';
+import { enterLabMode } from '../stores/modeActions';
 import { useSessionStore } from '../stores/sessionStore';
-import { useWiringStore } from '../stores/wiringStore';
 import { ThemeToggleButton } from './ThemeToggleButton';
 
 export function ModeSelect() {
   const experimentId = useSessionStore((s) => s.experimentId);
   const learnCompleted = useSessionStore((s) => s.learnCompleted);
+  const runPractised = useSessionStore((s) => s.runPractised);
   const goToScreen = useSessionStore((s) => s.goToScreen);
-  const setMode = useSessionStore((s) => s.setMode);
-  const resetLabSession = useSessionStore((s) => s.resetLabSession);
-  const clearAllWiresScripted = useWiringStore((s) => s.clearAllWiresScripted);
-  const initFromControls = useControlsStore((s) => s.initFromControls);
 
   const experiment = getExperiment(experimentId);
   const summary = EXPERIMENT_SUMMARIES.find((e) => e.id === experimentId);
   const isLearnDone = Boolean(learnCompleted[experimentId]);
-
-  const startMode = (targetMode: 'self' | 'learn') => {
-    clearAllWiresScripted();
-    initFromControls(experiment.controls);
-    resetLabSession();
-    setMode(targetMode);
-    goToScreen('lab');
-  };
+  const isObserveDone = Boolean(runPractised[experimentId]);
 
   return (
     <div
@@ -33,7 +22,7 @@ export function ModeSelect() {
         color: 'var(--vml-text)',
       }}
     >
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -85,10 +74,10 @@ export function ModeSelect() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <button
             type="button"
-            onClick={() => startMode('learn')}
+            onClick={() => enterLabMode(experimentId, 'learn')}
             className="flex flex-col justify-between gap-4 rounded-2xl p-5 text-left transition hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
             style={{
               backgroundColor: 'var(--vml-panel)',
@@ -133,7 +122,54 @@ export function ModeSelect() {
 
           <button
             type="button"
-            onClick={() => startMode('self')}
+            onClick={() => enterLabMode(experimentId, 'observe')}
+            className="flex flex-col justify-between gap-4 rounded-2xl p-5 text-left transition hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
+            style={{
+              backgroundColor: 'var(--vml-panel)',
+              border: '1px solid var(--vml-accent)',
+              color: 'var(--vml-text)',
+            }}
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-base font-bold">
+                  Observe mode (pre-wired)
+                </span>
+                {isObserveDone ? (
+                  <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                    Practised
+                  </span>
+                ) : (
+                  <span
+                    className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                    style={{
+                      backgroundColor: 'var(--vml-panel-hover)',
+                      color: 'var(--vml-accent)',
+                    }}
+                  >
+                    Pre-wired
+                  </span>
+                )}
+              </div>
+              <p
+                className="text-xs leading-relaxed"
+                style={{ color: 'var(--vml-text-muted)' }}
+              >
+                Connections are already made. Take readings and complete the
+                observation table.
+              </p>
+            </div>
+            <span
+              className="text-xs font-semibold"
+              style={{ color: 'var(--vml-accent)' }}
+            >
+              Open pre-wired bench →
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => enterLabMode(experimentId, 'self')}
             className="flex flex-col justify-between gap-4 rounded-2xl p-5 text-left transition hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
             style={{
               backgroundColor: 'var(--vml-panel)',

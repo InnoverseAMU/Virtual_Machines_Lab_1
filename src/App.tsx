@@ -8,6 +8,7 @@ import { evaluateExperimentPhysics } from './core/physics/evaluate';
 import type { CameraPreset } from './core/types';
 import { BenchScene } from './scenes/BenchScene';
 import { useControlsStore } from './stores/controlsStore';
+import { enterLabMode } from './stores/modeActions';
 import { useSessionStore } from './stores/sessionStore';
 import { useWiringStore } from './stores/wiringStore';
 import { ExperimentPicker } from './ui/ExperimentPicker';
@@ -36,13 +37,14 @@ const STICKY_EVENT_IDS = new Set([
 
 export function App() {
   const [confirmAction, setConfirmAction] = useState<
-    'back' | 'reset' | 'exit-learn' | null
+    'back' | 'reset' | 'exit-learn' | 'exit-observe' | null
   >(null);
   const [moreOpen, setMoreOpen] = useState(false);
 
   const screen = useSessionStore((s) => s.screen);
   const experimentId = useSessionStore((s) => s.experimentId);
   const mode = useSessionStore((s) => s.mode);
+  const observationRows = useSessionStore((s) => s.observationRows);
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
   const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
@@ -54,7 +56,6 @@ export function App() {
   const learnFinished = useSessionStore((s) => s.learnFinished);
 
   const goToScreen = useSessionStore((s) => s.goToScreen);
-  const setMode = useSessionStore((s) => s.setMode);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar);
@@ -97,6 +98,8 @@ export function App() {
 
   const experiment = useMemo(() => getExperiment(experimentId), [experimentId]);
   const isLearn = mode === 'learn';
+  const isObserve = mode === 'observe';
+  const isSelf = mode === 'self';
   const learnSteps = experiment.learnSteps;
   const currentLearnStep = learnSteps[learnStepIndex] ?? learnSteps[0];
 
@@ -387,7 +390,7 @@ export function App() {
     initFromControls(experiment.controls);
     if (isLearn) {
       clearAllWiresScripted();
-    } else {
+    } else if (isSelf) {
       clearAllWires(false);
     }
     resetLabSession();
@@ -397,6 +400,7 @@ export function App() {
     initFromControls,
     experiment.controls,
     isLearn,
+    isSelf,
     clearAllWiresScripted,
     clearAllWires,
     resetLabSession,
@@ -418,23 +422,23 @@ export function App() {
 
   const handleTryYourself = useCallback(() => {
     clearWireTimers();
-    clearAllWiresScripted();
-    initFromControls(experiment.controls);
-    resetLabSession();
-    setMode('self');
+    enterLabMode(experimentId, 'self');
     prevEventIdsRef.current.clear();
-  }, [
-    clearWireTimers,
-    clearAllWiresScripted,
-    initFromControls,
-    experiment.controls,
-    resetLabSession,
-    setMode,
-  ]);
+  }, [clearWireTimers, experimentId]);
 
   const handleBackClick = () => {
     if (isLearn) {
       setConfirmAction('exit-learn');
+      return;
+    }
+    if (isObserve) {
+      if (observationRows.length > 0) {
+        setConfirmAction('exit-observe');
+        return;
+      }
+      performResetBench();
+      clearAllWiresScripted();
+      goToScreen('picker');
       return;
     }
     if (wires.length > 0) {
@@ -485,19 +489,21 @@ export function App() {
 
             {!isLearn && (
               <>
-                <button
-                  type="button"
-                  onClick={() => submitWiring(wires)}
-                  className="h-8 rounded-full px-3 text-xs font-bold shadow-lg transition"
-                  style={{
-                    backgroundColor: 'var(--vml-accent)',
-                    color: 'var(--vml-accent-text)',
-                  }}
-                >
-                  Submit
-                </button>
+                {isSelf && (
+                  <button
+                    type="button"
+                    onClick={() => submitWiring(wires)}
+                    className="h-8 rounded-full px-3 text-xs font-bold shadow-lg transition"
+                    style={{
+                      backgroundColor: 'var(--vml-accent)',
+                      color: 'var(--vml-accent-text)',
+                    }}
+                  >
+                    Submit
+                  </button>
+                )}
 
-                {validationResult && (
+                {isSelf && validationResult && (
                   <button
                     type="button"
                     onClick={openLastResult}
@@ -625,7 +631,7 @@ export function App() {
                   color: 'var(--vml-tooltip-text)',
                 }}
               >
-                {!isLearn && validationResult && (
+                {isSelf && validationResult && (
                   <button
                     type="button"
                     onClick={() => {
@@ -670,7 +676,7 @@ export function App() {
                 color: 'var(--vml-text-muted)',
               }}
             >
-              {!isLearn && selectedTerminal ? (
+              {isSelf && selectedTerminal ? (
                 <span>
                   Selected:{' '}
                   <strong style={{ color: 'var(--vml-accent)' }}>
@@ -705,9 +711,9 @@ export function App() {
             onTryYourself={handleTryYourself}
             onExit={() => setConfirmAction('exit-learn')}
           />
-        ) : (
+        ) : isSelf ? (
           <SolutionBanner experiment={experiment} />
-        )}
+        ) : null}
       </div>
 
       <RightSidebar
@@ -718,7 +724,7 @@ export function App() {
         controlsLocked={learnControlsLocked}
       />
 
-      {!isLearn && (
+      {isSelf && (
         <ResultModal
           experiment={experiment}
           onRequestReset={() => setConfirmAction('reset')}
@@ -735,9 +741,11 @@ export function App() {
           <h2 id="confirm-action-title" className="text-base font-bold">
             {confirmAction === 'exit-learn'
               ? 'Exit guided walkthrough?'
-              : confirmAction === 'back'
-                ? 'Leave bench and discard wiring?'
-                : 'Reset the bench?'}
+              : confirmAction === 'exit-observe'
+                ? 'Leave pre-wired bench?'
+                : confirmAction === 'back'
+                  ? 'Leave bench and discard wiring?'
+                  : 'Reset the bench?'}
           </h2>
           <p
             className="text-xs leading-relaxed"
@@ -745,9 +753,13 @@ export function App() {
           >
             {confirmAction === 'exit-learn'
               ? 'Exiting returns you to mode selection and resets the walkthrough progress.'
-              : confirmAction === 'back'
-                ? 'You have wires placed on the bench. Returning to the experiment picker will clear your current wiring and controls.'
-                : 'This clears all wires, selected terminals, supply switch, variac knob, wattmeter ranges, lamp switches, MCB trip, meter damage, and notifications.'}
+              : confirmAction === 'exit-observe'
+                ? 'Returning to the experiment picker clears your current observation rows and resets the controls.'
+                : confirmAction === 'back'
+                  ? 'You have wires placed on the bench. Returning to the experiment picker will clear your current wiring and controls.'
+                  : isObserve
+                    ? 'This clears observation rows, supply switch, variac knob, wattmeter ranges, lamp switches, MCB trip, meter damage, and notifications. Pre-wired connections remain unchanged.'
+                    : 'This clears all wires, selected terminals, supply switch, variac knob, wattmeter ranges, lamp switches, MCB trip, meter damage, and notifications.'}
           </p>
           <div className="flex justify-end gap-2">
             <button
@@ -767,7 +779,10 @@ export function App() {
                 const action = confirmAction;
                 setConfirmAction(null);
                 performResetBench();
-                if (action === 'exit-learn') {
+                if (action === 'exit-observe') {
+                  clearAllWiresScripted();
+                  goToScreen('picker');
+                } else if (action === 'exit-learn') {
                   goToScreen('mode');
                 } else if (action === 'back') {
                   goToScreen('picker');
@@ -777,7 +792,7 @@ export function App() {
             >
               {confirmAction === 'exit-learn'
                 ? 'Exit walkthrough'
-                : confirmAction === 'back'
+                : confirmAction === 'back' || confirmAction === 'exit-observe'
                   ? 'Leave bench'
                   : 'Reset bench'}
             </button>

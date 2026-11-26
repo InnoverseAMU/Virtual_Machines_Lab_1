@@ -1,8 +1,10 @@
 import { Html } from '@react-three/drei';
 import { useState } from 'react';
+import { getExperiment } from '../core/experiments/registry';
 import type { TerminalDef, TerminalId } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
+import { useThemeStore } from '../stores/themeStore';
 import { useWiringStore } from '../stores/wiringStore';
 import { TERMINAL_SELECTED_COLOR } from '../theme/tokens';
 import { LabelPlate } from './LabelPlate';
@@ -27,12 +29,27 @@ export function Terminal({
   const clickTerminal = useWiringStore((s) => s.clickTerminal);
   const setHoveredTerminal = useWiringStore((s) => s.setHoveredTerminal);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
+  const experimentId = useSessionStore((s) => s.experimentId);
   const mode = useSessionStore((s) => s.mode);
+  const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
+  const resolvedTheme = useThemeStore((s) => s.resolved);
   const supplyOn = useControlsStore((s) => s.supplyOn);
 
   const isLearnMode = mode === 'learn';
-  const isSelected = !isLearnMode && selectedTerminal === fullId;
+  const isObserveMode = mode === 'observe';
+  const isSelected = !isLearnMode && !isObserveMode && selectedTerminal === fullId;
   const ringColor = UNIFORM_TERMINAL_COLOR;
+  const highlightColor = resolvedTheme === 'dark' ? '#38bdf8' : '#0284c7';
+
+  let isNetHighlighted = false;
+  let isNetDimmed = false;
+  if (isObserveMode && highlightedNetIndex !== null) {
+    const net = getExperiment(experimentId).acceptedNetlists[0]?.[highlightedNetIndex];
+    if (net) {
+      isNetHighlighted = net.includes(fullId);
+      isNetDimmed = !isNetHighlighted;
+    }
+  }
 
   return (
     <group position={terminal.localPos}>
@@ -46,9 +63,10 @@ export function Terminal({
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
-          setHovered(true);
+          setHovered(!isObserveMode);
           setHoveredTerminal(fullId);
-          document.body.style.cursor = isLearnMode ? 'default' : 'pointer';
+          document.body.style.cursor =
+            isLearnMode || isObserveMode ? 'default' : 'pointer';
         }}
         onPointerOut={(e) => {
           e.stopPropagation();
@@ -66,20 +84,28 @@ export function Terminal({
         <cylinderGeometry args={[0.046, 0.052, 0.04, 18]} />
         <meshStandardMaterial
           color={
-            isSelected
-              ? TERMINAL_SELECTED_COLOR
-              : hovered
-                ? '#f59e0b'
-                : ringColor
+            isNetHighlighted
+              ? highlightColor
+              : isSelected
+                ? TERMINAL_SELECTED_COLOR
+                : hovered
+                  ? '#f59e0b'
+                  : ringColor
           }
           emissive={
-            isSelected
-              ? TERMINAL_SELECTED_COLOR
-              : hovered
-                ? '#b45309'
-                : '#000000'
+            isNetHighlighted
+              ? highlightColor
+              : isSelected
+                ? TERMINAL_SELECTED_COLOR
+                : hovered
+                  ? '#b45309'
+                  : '#000000'
           }
-          emissiveIntensity={isSelected ? 0.7 : hovered ? 0.45 : 0}
+          emissiveIntensity={
+            isNetHighlighted ? 0.8 : isSelected ? 0.7 : hovered ? 0.45 : 0
+          }
+          transparent={isNetDimmed}
+          opacity={isNetDimmed ? 0.28 : 1}
           roughness={0.35}
           metalness={0.2}
         />
@@ -89,7 +115,15 @@ export function Terminal({
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.045]} castShadow>
         <cylinderGeometry args={[0.025, 0.025, 0.045, 16]} />
         <meshStandardMaterial
-          color={isSelected ? '#38bdf8' : '#fbbf24'}
+          color={
+            isNetHighlighted
+              ? highlightColor
+              : isSelected
+                ? '#38bdf8'
+                : '#fbbf24'
+          }
+          transparent={isNetDimmed}
+          opacity={isNetDimmed ? 0.3 : 1}
           metalness={0.75}
           roughness={0.25}
         />

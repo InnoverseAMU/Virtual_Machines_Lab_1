@@ -151,3 +151,113 @@ export function buildNets(
     },
   };
 }
+
+export function collectInternalLinks(
+  components: ComponentInstance[],
+): [TerminalId, TerminalId][] {
+  const links: [TerminalId, TerminalId][] = [];
+  for (const comp of components) {
+    const def = getComponentDef(comp.type);
+    for (const [t1, t2] of def.internalLinks ?? []) {
+      links.push([`${comp.id}.${t1}`, `${comp.id}.${t2}`]);
+    }
+  }
+  return links;
+}
+
+function getWorldPosMap(
+  components: ComponentInstance[],
+): Map<TerminalId, [number, number, number]> {
+  const map = new Map<TerminalId, [number, number, number]>();
+  for (const comp of components) {
+    for (const t of getComponentDef(comp.type).terminals) {
+      map.set(`${comp.id}.${t.name}`, [
+        comp.position[0] + t.localPos[0],
+        comp.position[1] + t.localPos[1],
+        comp.position[2] + t.localPos[2],
+      ]);
+    }
+  }
+  return map;
+}
+
+function distSq(
+  a: [number, number, number],
+  b: [number, number, number],
+): number {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  const dz = a[2] - b[2];
+  return dx * dx + dy * dy + dz * dz;
+}
+
+function orderNetByDistance(
+  net: Net,
+  posMap: Map<TerminalId, [number, number, number]>,
+): TerminalId[] {
+  if (net.length <= 2 || posMap.size === 0) return [...net];
+  const remaining = [...net];
+  // Start from the leftmost terminal so chains flow neatly across the bench
+  remaining.sort((a, b) => {
+    const pa = posMap.get(a);
+    const pb = posMap.get(b);
+    if (!pa || !pb) return a.localeCompare(b);
+    return pa[0] - pb[0] || pa[2] - pb[2];
+  });
+
+  const ordered: TerminalId[] = [remaining.shift()!];
+  while (remaining.length > 0) {
+    const last = ordered[ordered.length - 1];
+    const lastPos = posMap.get(last);
+    let bestIdx = 0;
+    if (lastPos) {
+      let bestDist = Infinity;
+      for (let i = 0; i < remaining.length; i++) {
+        const p = posMap.get(remaining[i]);
+        if (!p) continue;
+        const d = distSq(lastPos, p);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
+      }
+    }
+    ordered.push(remaining.splice(bestIdx, 1)[0]);
+  }
+  return ordered;
+}
+
+/**
+ * Returns a minimal chain of terminal pairs that realises the given netlist,
+ * seeded with component internal links so already-common terminals are skipped.
+ * When components are provided, terminals in each net are ordered by 3D distance
+ * so wires stay short and avoid crossing the bench.
+ */
+export function wiresFromNetlist(
+  netlist: Net[],
+  internalLinks: [TerminalId, TerminalId][],
+  components?: ComponentInstance[],
+): WireEndpointPair[] {
+  const uf = new UnionFind();
+  for (const [a, b] of internalLinks) {
+    uf.union(a, b);
+  }
+
+  const posMap = components ? getWorldPosMap(components) : new Map();
+  const pairs: WireEndpointPair[] = [];
+
+  for (const net of netlist) {
+    if (net.length < 2) continue;
+    const ordered = orderNetByDistance(net, posMap);
+    for (let i = 1; i < ordered.length; i++) {
+      const a = ordered[i - 1];
+      const b = ordered[i];
+      if (!uf.connected(a, b)) {
+        pairs.push([a, b]);
+        uf.union(a, b);
+      }
+    }
+  }
+
+  return pairs;
+}

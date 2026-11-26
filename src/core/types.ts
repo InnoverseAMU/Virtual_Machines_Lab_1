@@ -158,6 +158,7 @@ export interface ExperimentDef {
   netLabels?: string[];
   netCategories?: string[];
   netCategoryKeys?: NetCategoryKey[];
+  netPurposes?: Partial<Record<NetCategoryKey, string>>;
   faultPatterns: FaultPattern[];
   controls: ControlDef[];
   physicsModel: string;

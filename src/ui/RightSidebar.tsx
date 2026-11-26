@@ -540,6 +540,8 @@ export function RightSidebar({
 }: RightSidebarProps) {
   const [activeTab, setActiveTab] = useState<SidebarTab>('bench');
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const netTapPointerTypeRef = useRef<string>('mouse');
 
   const mode = useSessionStore((s) => s.mode);
   const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
@@ -548,6 +550,10 @@ export function RightSidebar({
   const toggleNumericReadouts = useSessionStore((s) => s.toggleNumericReadouts);
   const observationRows = useSessionStore((s) => s.observationRows);
   const addObservationRow = useSessionStore((s) => s.addObservationRow);
+  const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
+  const highlightedNetPinned = useSessionStore((s) => s.highlightedNetPinned);
+  const setHighlightedNetIndex = useSessionStore((s) => s.setHighlightedNetIndex);
+  const clearHighlightedNet = useSessionStore((s) => s.clearHighlightedNet);
 
   const supplyOn = useControlsStore((s) => s.supplyOn);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
@@ -556,10 +562,11 @@ export function RightSidebar({
   const wmIRange = useControlsStore((s) => s.wmIRange);
   const lamps = useControlsStore((s) => s.lamps);
 
-  const isSelfMode = mode === 'self';
-  const currentTab: SidebarTab = isSelfMode ? activeTab : 'bench';
+  const isObserveMode = mode === 'observe';
+  const hasObservations = mode === 'self' || isObserveMode;
+  const currentTab: SidebarTab = hasObservations ? activeTab : 'bench';
   const canAddRow =
-    isSelfMode &&
+    hasObservations &&
     supplyOn &&
     primaryEnergised &&
     observationRows.length < MAX_OBSERVATION_ROWS;
@@ -583,7 +590,7 @@ export function RightSidebar({
     );
   };
 
-  const tabBar = isSelfMode ? (
+  const tabBar = hasObservations ? (
     <div
       className="grid grid-cols-2 gap-1 p-1.5"
       style={{ borderBottom: '1px solid var(--vml-border)' }}
@@ -627,6 +634,142 @@ export function RightSidebar({
     </div>
   ) : null;
 
+  const connectionsSection = isObserveMode ? (
+    <section
+      style={{ borderTop: '1px solid var(--vml-border)' }}
+      className="pt-3.5"
+    >
+      <button
+        type="button"
+        aria-expanded={connectionsOpen}
+        onClick={() => {
+          setConnectionsOpen((open) => {
+            if (open) clearHighlightedNet();
+            return !open;
+          });
+        }}
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-bold"
+        style={{
+          backgroundColor: 'var(--vml-panel-hover)',
+          border: '1px solid var(--vml-border)',
+          color: 'var(--vml-text)',
+        }}
+      >
+        <span>Connections ({experiment.acceptedNetlists[0]?.length ?? 0} nets)</span>
+        <span className="font-mono text-[11px]">
+          {connectionsOpen ? '▾' : '▸'}
+        </span>
+      </button>
+
+      {connectionsOpen && (
+        <div className="mt-2.5 space-y-2.5 text-xs">
+          <p className="text-[11px]" style={{ color: 'var(--vml-text-muted)' }}>
+            Hover on desktop or tap on touch to highlight a net on the bench.
+          </p>
+          {(() => {
+            const netlist = experiment.acceptedNetlists[0] ?? [];
+            const keys = experiment.netCategoryKeys ?? [];
+            const labels = experiment.netLabels ?? [];
+            const purposes = experiment.netPurposes ?? {};
+            const orderedGroups: string[] = [];
+            for (const k of keys) {
+              if (!orderedGroups.includes(k)) orderedGroups.push(k);
+            }
+            if (orderedGroups.length === 0) orderedGroups.push('all');
+
+            return orderedGroups.map((catKey) => {
+              const indices = netlist
+                .map((_, idx) => idx)
+                .filter((idx) => (keys[idx] ?? 'all') === catKey);
+              if (indices.length === 0) return null;
+              const purposeText =
+                catKey !== 'all'
+                  ? purposes[catKey as keyof typeof purposes]
+                  : undefined;
+
+              return (
+                <div
+                  key={catKey}
+                  className="space-y-1.5 rounded-xl p-2"
+                  style={{ border: '1px solid var(--vml-border)' }}
+                >
+                  <div className="font-semibold capitalize">{catKey}</div>
+                  {purposeText && (
+                    <p
+                      className="text-[11px] leading-snug"
+                      style={{ color: 'var(--vml-text-muted)' }}
+                    >
+                      {purposeText}
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    {indices.map((netIdx) => {
+                      const net = netlist[netIdx];
+                      const active = highlightedNetIndex === netIdx;
+                      return (
+                        <button
+                          key={netIdx}
+                          type="button"
+                          onPointerDown={(e) => {
+                            netTapPointerTypeRef.current = e.pointerType;
+                          }}
+                          onMouseEnter={() => {
+                            if (!highlightedNetPinned) {
+                              setHighlightedNetIndex(netIdx, false);
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            if (!highlightedNetPinned) {
+                              clearHighlightedNet();
+                            }
+                          }}
+                          onClick={() => {
+                            if (netTapPointerTypeRef.current !== 'mouse') {
+                              if (highlightedNetIndex === netIdx) {
+                                clearHighlightedNet();
+                              } else {
+                                setHighlightedNetIndex(netIdx, true);
+                              }
+                            } else if (
+                              highlightedNetPinned &&
+                              highlightedNetIndex === netIdx
+                            ) {
+                              clearHighlightedNet();
+                            } else {
+                              setHighlightedNetIndex(netIdx, true);
+                            }
+                          }}
+                          aria-pressed={active}
+                          className="w-full rounded-lg px-2 py-1.5 text-left transition"
+                          style={{
+                            backgroundColor: active
+                              ? 'var(--vml-accent)'
+                              : 'var(--vml-panel-hover)',
+                            color: active
+                              ? 'var(--vml-accent-text)'
+                              : 'var(--vml-text)',
+                            border: '1px solid var(--vml-border)',
+                          }}
+                        >
+                          <div className="text-[11px] font-semibold">
+                            {labels[netIdx] ?? `Net ${netIdx + 1}`}
+                          </div>
+                          <div className="font-mono text-[10px] opacity-85">
+                            {net.join(' · ')}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      )}
+    </section>
+  ) : null;
+
   const benchTabBody = (
     <div className="space-y-4">
       <ControlsSection controls={controls} controlsLocked={controlsLocked} />
@@ -659,6 +802,7 @@ export function RightSidebar({
           onToggleNumericReadouts={toggleNumericReadouts}
         />
       </div>
+      {connectionsSection}
     </div>
   );
 
@@ -672,7 +816,7 @@ export function RightSidebar({
   );
 
   const stickyAddRowBar =
-    isSelfMode && currentTab === 'bench' ? (
+    hasObservations && currentTab === 'bench' ? (
       <div
         className="flex shrink-0 items-center justify-between gap-2 px-3.5 py-2.5"
         style={{
@@ -788,7 +932,7 @@ export function RightSidebar({
               </strong>
             </span>
             <div className="flex items-center gap-1">
-              {isSelfMode && (
+              {hasObservations && (
                 <button
                   type="button"
                   disabled={!canAddRow}

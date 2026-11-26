@@ -357,11 +357,18 @@ export function BenchScene({
   const experimentId = useSessionStore((s) => s.experimentId);
   const mode = useSessionStore((s) => s.mode);
   const showingSolution = useSessionStore((s) => s.showingSolution);
+  const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
+  const clearHighlightedNet = useSessionStore((s) => s.clearHighlightedNet);
   const resolvedTheme = useThemeStore((s) => s.resolved);
   const wires = useWiringStore((s) => s.wires);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
 
   const experiment = useMemo(() => getExperiment(experimentId), [experimentId]);
+  const highlightedNetTerminals = useMemo(() => {
+    if (mode !== 'observe' || highlightedNetIndex === null) return null;
+    const net = experiment.acceptedNetlists[0]?.[highlightedNetIndex];
+    return net ? new Set(net) : null;
+  }, [mode, highlightedNetIndex, experiment]);
   const netGraph = useMemo(
     () => buildNets(experiment.components, wires),
     [experiment.components, wires],
@@ -446,7 +453,10 @@ export function BenchScene({
         toneMapping: THREE.ACESFilmicToneMapping,
         toneMappingExposure: 1.05,
       }}
-      onPointerMissed={() => clearSelectedTerminal()}
+      onPointerMissed={() => {
+        clearSelectedTerminal();
+        clearHighlightedNet();
+      }}
       className="h-full w-full"
     >
       <ThemedEnvironment
@@ -535,15 +545,25 @@ export function BenchScene({
       ))}
 
       {/* Student / tutorial wires */}
-      {wireMeta.map(({ wire, netIdx, idxInNet }) => (
-        <WireMesh
-          key={wire.id}
-          wire={wire}
-          components={experiment.components}
-          netIndex={netIdx}
-          wireIndexInNet={idxInNet}
-        />
-      ))}
+      {wireMeta.map(({ wire, netIdx, idxInNet }) => {
+        const isWireHighlighted =
+          highlightedNetTerminals !== null &&
+          highlightedNetTerminals.has(wire.a) &&
+          highlightedNetTerminals.has(wire.b);
+        const isWireDimmed =
+          highlightedNetTerminals !== null && !isWireHighlighted;
+        return (
+          <WireMesh
+            key={wire.id}
+            wire={wire}
+            components={experiment.components}
+            netIndex={netIdx}
+            wireIndexInNet={idxInNet}
+            highlighted={isWireHighlighted}
+            dimmed={isWireDimmed}
+          />
+        );
+      })}
 
       {/* Canonical Netlist A ghost solution overlay */}
       {ghostWireMeta.map(({ wire, netIdx, idxInNet }) => (
