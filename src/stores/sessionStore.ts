@@ -8,6 +8,7 @@ import {
   computeRunTruth,
   MAX_OBSERVATION_ROWS,
 } from '../core/physics/report';
+import type { AssetFile } from '../core/experiments/assets';
 import type {
   CameraPreset,
   ObservationRow,
@@ -164,6 +165,10 @@ interface SessionState {
   showNumericReadouts: boolean;
   toasts: RuntimeEvent[];
 
+  // Ephemeral reference viewers (never persisted, never count as hints/attempts)
+  diagramPanelOpen: boolean;
+  pdfPreviewAsset: AssetFile | null;
+
   goToScreen: (screen: AppScreen) => void;
   selectExperiment: (id: string) => void;
   setMode: (mode: LabMode) => void;
@@ -172,6 +177,11 @@ interface SessionState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   toggleNumericReadouts: () => void;
+  openDiagramPanel: () => void;
+  closeDiagramPanel: () => void;
+  toggleDiagramPanel: () => void;
+  openPdfPreview: (asset: AssetFile) => void;
+  closePdfPreview: () => void;
 
   submitWiring: (wires: Wire[]) => ValidationResult;
   retry: () => void;
@@ -249,7 +259,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       : true,
   toasts: [],
 
-  goToScreen: (screen) => set({ screen }),
+  diagramPanelOpen: false,
+  pdfPreviewAsset: null,
+
+  goToScreen: (screen) =>
+    set({
+      screen,
+      diagramPanelOpen: false,
+      pdfPreviewAsset: null,
+    }),
 
   selectExperiment: (experimentId) =>
     set({
@@ -270,6 +288,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       learnFinished: false,
       cameraPreset: 'overview',
       toasts: [],
+      diagramPanelOpen: false,
+      pdfPreviewAsset: null,
     }),
 
   setMode: (mode) => set({ mode }),
@@ -578,5 +598,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       learnFinished: false,
       cameraPreset: 'overview',
       toasts: [],
+      diagramPanelOpen: false,
+      pdfPreviewAsset: null,
     }),
+
+  openDiagramPanel: () => set({ diagramPanelOpen: true }),
+  closeDiagramPanel: () => set({ diagramPanelOpen: false }),
+  toggleDiagramPanel: () =>
+    set((s) => ({ diagramPanelOpen: !s.diagramPanelOpen })),
+  openPdfPreview: (asset) => set({ pdfPreviewAsset: asset }),
+  closePdfPreview: () => set({ pdfPreviewAsset: null }),
 }));

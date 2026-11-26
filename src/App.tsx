@@ -3,6 +3,10 @@ import {
   evaluateLearnStepCondition,
   findVariacForTargetV1,
 } from './core/circuit/learn';
+import {
+  ASSET_MANIFEST,
+  getExperimentAssets,
+} from './core/experiments/assets';
 import { getExperiment } from './core/experiments/registry';
 import { evaluateExperimentPhysics } from './core/physics/evaluate';
 import type { CameraPreset } from './core/types';
@@ -11,10 +15,13 @@ import { useControlsStore } from './stores/controlsStore';
 import { enterLabMode } from './stores/modeActions';
 import { useSessionStore } from './stores/sessionStore';
 import { useWiringStore } from './stores/wiringStore';
+import { DiagramPanel } from './ui/DiagramPanel';
 import { ExperimentPicker } from './ui/ExperimentPicker';
 import { LearnPlayer } from './ui/LearnPlayer';
 import { Modal } from './ui/Modal';
 import { ModeSelect } from './ui/ModeSelect';
+import { ExperimentPdfActions } from './ui/PdfActions';
+import { PdfPanel } from './ui/PdfPanel';
 import { ResultModal } from './ui/ResultModal';
 import { RightSidebar } from './ui/RightSidebar';
 import { SolutionBanner } from './ui/SolutionBanner';
@@ -49,6 +56,8 @@ export function App() {
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
   const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
   const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
+  const diagramPanelOpen = useSessionStore((s) => s.diagramPanelOpen);
+  const pdfPreviewAsset = useSessionStore((s) => s.pdfPreviewAsset);
   const validationResult = useSessionStore((s) => s.validationResult);
 
   const learnStepIndex = useSessionStore((s) => s.learnStepIndex);
@@ -60,6 +69,9 @@ export function App() {
   const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar);
   const toggleNumericReadouts = useSessionStore((s) => s.toggleNumericReadouts);
+  const toggleDiagramPanel = useSessionStore((s) => s.toggleDiagramPanel);
+  const closeDiagramPanel = useSessionStore((s) => s.closeDiagramPanel);
+  const closePdfPreview = useSessionStore((s) => s.closePdfPreview);
   const submitWiring = useSessionStore((s) => s.submitWiring);
   const openLastResult = useSessionStore((s) => s.openLastResult);
   const setLearnStepIndex = useSessionStore((s) => s.setLearnStepIndex);
@@ -97,6 +109,10 @@ export function App() {
   const initFromControls = useControlsStore((s) => s.initFromControls);
 
   const experiment = useMemo(() => getExperiment(experimentId), [experimentId]);
+  const experimentAssets = useMemo(
+    () => getExperimentAssets(ASSET_MANIFEST, experimentId),
+    [experimentId],
+  );
   const isLearn = mode === 'learn';
   const isObserve = mode === 'observe';
   const isSelf = mode === 'self';
@@ -329,12 +345,30 @@ export function App() {
       }
       if (e.key === 'Escape') {
         if (confirmAction !== null) return;
+        if (pdfPreviewAsset !== null) {
+          closePdfPreview();
+          return;
+        }
+        if (diagramPanelOpen) {
+          closeDiagramPanel();
+          return;
+        }
         if (isLearn) {
           setConfirmAction('exit-learn');
         } else {
           clearSelectedTerminal();
           setFocusedControl(null);
         }
+      } else if (
+        (e.key === 'd' || e.key === 'D') &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        confirmAction === null &&
+        (isSelf || isObserve) &&
+        experimentAssets.diagrams.length > 0
+      ) {
+        toggleDiagramPanel();
       } else if (
         isLearn &&
         !learnFinished &&
@@ -374,15 +408,23 @@ export function App() {
   }, [
     screen,
     isLearn,
+    isSelf,
+    isObserve,
     learnFinished,
     focusedControl,
     confirmAction,
+    diagramPanelOpen,
+    pdfPreviewAsset,
+    experimentAssets.diagrams.length,
     handleLearnNext,
     handleLearnBack,
     clearSelectedTerminal,
     setFocusedControl,
     toggleTerminalLabels,
     toggleSidebar,
+    toggleDiagramPanel,
+    closeDiagramPanel,
+    closePdfPreview,
   ]);
 
   const performResetBench = useCallback(() => {
@@ -450,11 +492,21 @@ export function App() {
   };
 
   if (screen === 'picker') {
-    return <ExperimentPicker />;
+    return (
+      <>
+        <ExperimentPicker />
+        <PdfPanel />
+      </>
+    );
   }
 
   if (screen === 'mode') {
-    return <ModeSelect />;
+    return (
+      <>
+        <ModeSelect />
+        <PdfPanel />
+      </>
+    );
   }
 
   const learnControlsLocked = isLearn && learnStepIndex < 11;
@@ -566,8 +618,46 @@ export function App() {
             })}
           </div>
 
+          {/* Reference assets (Self & Observe modes only) */}
+          {(isSelf || isObserve) && (
+            <div className="pointer-events-auto order-4 flex w-full flex-wrap items-center justify-center gap-1.5 sm:order-none sm:w-auto sm:justify-start">
+              <button
+                type="button"
+                disabled={experimentAssets.diagrams.length === 0}
+                onClick={toggleDiagramPanel}
+                aria-pressed={diagramPanelOpen}
+                aria-label={
+                  experimentAssets.diagrams.length === 0
+                    ? 'Diagram not added yet'
+                    : 'View circuit diagram (D)'
+                }
+                title={
+                  experimentAssets.diagrams.length === 0
+                    ? 'Diagram not added yet'
+                    : 'View circuit diagram (D)'
+                }
+                className="inline-flex h-8 shrink-0 items-center rounded-full px-2.5 text-xs font-medium shadow-lg backdrop-blur transition disabled:cursor-not-allowed disabled:opacity-55"
+                style={{
+                  backgroundColor: diagramPanelOpen
+                    ? 'var(--vml-accent)'
+                    : 'var(--vml-panel)',
+                  border: '1px solid var(--vml-border)',
+                  color: diagramPanelOpen
+                    ? 'var(--vml-accent-text)'
+                    : 'var(--vml-text)',
+                }}
+              >
+                {experimentAssets.diagrams.length === 0
+                  ? 'Diagram not added yet'
+                  : 'View circuit diagram (D)'}
+              </button>
+
+              <ExperimentPdfActions pdf={experimentAssets.pdf} variant="topbar" />
+            </div>
+          )}
+
           {/* Right group: theme, labels, panel toggle, and phone More menu */}
-          <div className="pointer-events-auto relative flex items-center gap-1.5">
+          <div className="pointer-events-auto order-2 relative flex items-center gap-1.5 sm:order-none">
             <ThemeToggleButton />
 
             <button
@@ -714,7 +804,19 @@ export function App() {
         ) : isSelf ? (
           <SolutionBanner experiment={experiment} />
         ) : null}
+
+        {(isSelf || isObserve) && (
+          <DiagramPanel
+            open={diagramPanelOpen}
+            experimentId={experiment.id}
+            experimentTitle={experiment.title}
+            diagrams={experimentAssets.diagrams}
+            onClose={closeDiagramPanel}
+          />
+        )}
       </div>
+
+      <PdfPanel />
 
       <RightSidebar
         experiment={experiment}

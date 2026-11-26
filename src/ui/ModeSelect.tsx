@@ -1,6 +1,8 @@
+import { ASSET_MANIFEST, getExperimentAssets } from '../core/experiments/assets';
 import { EXPERIMENT_SUMMARIES, getExperiment } from '../core/experiments/registry';
 import { enterLabMode } from '../stores/modeActions';
 import { useSessionStore } from '../stores/sessionStore';
+import { ExperimentPdfActions } from './PdfActions';
 import { ThemeToggleButton } from './ThemeToggleButton';
 
 export function ModeSelect() {
@@ -11,6 +13,7 @@ export function ModeSelect() {
 
   const experiment = getExperiment(experimentId);
   const summary = EXPERIMENT_SUMMARIES.find((e) => e.id === experimentId);
+  const expAssets = getExperimentAssets(ASSET_MANIFEST, experimentId);
   const isLearnDone = Boolean(learnCompleted[experimentId]);
   const isObserveDone = Boolean(runPractised[experimentId]);
 
@@ -55,7 +58,10 @@ export function ModeSelect() {
           >
             Exp {summary?.number ?? experiment.id}
           </span>
-          <h1 className="text-xl font-bold sm:text-2xl">{experiment.title}</h1>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-xl font-bold sm:text-2xl">{experiment.title}</h1>
+            <ExperimentPdfActions pdf={expAssets.pdf} variant="inline" />
+          </div>
           <div className="space-y-1">
             <div
               className="text-xs font-semibold uppercase"

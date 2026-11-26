@@ -1,0 +1,20 @@
+{
+  "ex3-1/fig-3-1-1": "Fig. 3.1.1 Circuit diagram for load-test of a transformer",
+  "ex3-2/fig-3-2-7": "Fig. 3.2.7 Circuit diagram for open-circuit tests",
+  "ex3-2/fig-3-2-8": "Fig. 3.2.8 Circuit diagram for short-circuit tests",
+  "ex3-3/fig-3-3-1": "Fig. 3.3.1 Circuit diagram for the Sumpner's test",
+  "ex3-3/fig-3-3-2": "Fig. 3.3.2 Connection of wattmeter with a current transformer",
+  "ex3-4/fig-3-4-1": "Fig. 3.4.1 Flow of circulating current in a transformer",
+  "ex3-4/fig-3-4-2": "Fig. 3.4.2 Circuit diagram for the parallel operation of transformers",
+  "ex3-5/fig-3-5-1": "Fig. 3.5.1 Star-connected winding",
+  "ex3-5/fig-3-5-2": "Fig. 3.5.2 Delta-connected winding",
+  "ex3-5/fig-3-5-3": "Fig. 3.5.3 Zig-zag star connected winding",
+  "ex3-6/fig-3-6-1": "Fig. 3.6.1 Three-phase to single-phase transformation",
+  "ex3-6/fig-3-6-3": "Fig. 3.6.3 Secondary winding connection for three-phase to six-phase transformation",
+  "ex3-6/fig-3-6-4": "Fig. 3.6.4 Scott-connected transformers",
+  "ex4-1/fig-4-1-1": "Fig. 4.1.1 Circuit for the load test of induction motor",
+  "ex4-2/fig-4-2-5": "Fig. 4.2.5 Circuit diagram for the no-load and blocked-rotor tests",
+  "ex4-2/fig-4-2-6": "Fig. 4.2.6 Circuit diagram for the DC test",
+  "ex4-5/fig-4-5-1": "Fig. 4.5.1 Equivalent circuit of single-phase induction motor",
+  "ex4-5/fig-4-5-4": "Fig. 4.5.4 Circuit diagram for the blocked-rotor and the no-load tests"
+}

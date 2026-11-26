@@ -1,6 +1,8 @@
+import { ASSET_MANIFEST, getExperimentAssets } from '../core/experiments/assets';
 import { EXPERIMENT_SUMMARIES } from '../core/experiments/registry';
 import type { ExperimentSummary } from '../core/types';
 import { useSessionStore } from '../stores/sessionStore';
+import { CommonPdfLink, ExperimentPdfActions } from './PdfActions';
 import { ThemeToggleButton } from './ThemeToggleButton';
 
 export function ExperimentPicker() {
@@ -27,22 +29,12 @@ export function ExperimentPicker() {
     const isObserveDone = Boolean(runPractised[exp.id]);
     const attemptCount = attempts[exp.id] ?? 0;
     const usedSol = Boolean(usedSolutionByExperiment[exp.id]);
+    const expAssets = getExperimentAssets(ASSET_MANIFEST, exp.id);
 
     return (
-      <button
+      <article
         key={exp.id}
-        type="button"
-        disabled={!exp.available}
-        onClick={() => {
-          if (!exp.available) return;
-          selectExperiment(exp.id);
-          goToScreen('mode');
-        }}
-        className={`flex w-full flex-col justify-between gap-3 rounded-2xl p-4 text-left transition ${
-          exp.available
-            ? 'cursor-pointer hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none'
-            : 'cursor-not-allowed opacity-60'
-        }`}
+        className="flex w-full flex-col justify-between overflow-hidden rounded-2xl transition"
         style={{
           backgroundColor: 'var(--vml-panel)',
           border: exp.available
@@ -51,106 +43,131 @@ export function ExperimentPicker() {
           color: 'var(--vml-text)',
         }}
       >
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center justify-between gap-1.5">
-            <span
-              className="rounded-md px-2 py-0.5 font-mono text-xs font-bold"
-              style={{
-                backgroundColor: exp.available
-                  ? 'var(--vml-accent)'
-                  : 'var(--vml-panel-hover)',
-                color: exp.available
-                  ? 'var(--vml-accent-text)'
-                  : 'var(--vml-text-muted)',
-              }}
+        <button
+          type="button"
+          disabled={!exp.available}
+          onClick={() => {
+            if (!exp.available) return;
+            selectExperiment(exp.id);
+            goToScreen('mode');
+          }}
+          className={`flex flex-1 flex-col justify-between gap-3 p-4 text-left transition ${
+            exp.available
+              ? 'cursor-pointer hover:opacity-95 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none'
+              : 'cursor-not-allowed opacity-65'
+          }`}
+        >
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <span
+                className="rounded-md px-2 py-0.5 font-mono text-xs font-bold"
+                style={{
+                  backgroundColor: exp.available
+                    ? 'var(--vml-accent)'
+                    : 'var(--vml-panel-hover)',
+                  color: exp.available
+                    ? 'var(--vml-accent-text)'
+                    : 'var(--vml-text-muted)',
+                }}
+              >
+                Exp {exp.number}
+              </span>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {!exp.available ? (
+                  <span
+                    className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                    style={{
+                      backgroundColor: 'var(--vml-panel-hover)',
+                      color: 'var(--vml-text-muted)',
+                    }}
+                  >
+                    Coming soon
+                  </span>
+                ) : isCompleted ? (
+                  <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                    Completed
+                  </span>
+                ) : (
+                  <span
+                    className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                    style={{
+                      backgroundColor: 'var(--vml-panel-hover)',
+                      color: 'var(--vml-accent)',
+                    }}
+                  >
+                    Available
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <h3 className="text-sm leading-snug font-semibold">{exp.title}</h3>
+          </div>
+
+          {exp.available && (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 text-xs"
+              style={{ color: 'var(--vml-text-muted)' }}
             >
-              Exp {exp.number}
-            </span>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              {!exp.available ? (
-                <span
-                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                  style={{
-                    backgroundColor: 'var(--vml-panel-hover)',
-                    color: 'var(--vml-text-muted)',
-                  }}
-                >
-                  Coming soon
-                </span>
-              ) : isCompleted ? (
-                <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                  Completed
-                </span>
-              ) : (
-                <span
-                  className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                  style={{
-                    backgroundColor: 'var(--vml-panel-hover)',
-                    color: 'var(--vml-accent)',
-                  }}
-                >
-                  Available
-                </span>
-              )}
+              <div className="flex flex-wrap items-center gap-1">
+                <span>Attempts: {attemptCount}</span>
+                {isLearnDone && (
+                  <span
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      backgroundColor: 'var(--vml-panel-hover)',
+                      border: '1px solid var(--vml-border)',
+                    }}
+                  >
+                    Learn completed
+                  </span>
+                )}
+                {isRunDone && (
+                  <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                    Run completed
+                  </span>
+                )}
+                {isObserveDone && (
+                  <span
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      backgroundColor: 'var(--vml-panel-hover)',
+                      border: '1px solid var(--vml-border)',
+                    }}
+                  >
+                    Run practised (pre-wired)
+                  </span>
+                )}
+                {usedSol && (
+                  <span
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      backgroundColor: 'var(--vml-panel-hover)',
+                      border: '1px solid var(--vml-border)',
+                    }}
+                  >
+                    Used solution
+                  </span>
+                )}
+              </div>
+              <span style={{ color: 'var(--vml-accent)' }} className="font-semibold">
+                Select →
+              </span>
             </div>
-          </div>
+          )}
+        </button>
 
-          <h3 className="text-sm leading-snug font-semibold">{exp.title}</h3>
+        <div
+          className="flex items-center justify-between gap-2 px-4 py-2.5"
+          style={{
+            borderTop: '1px solid var(--vml-border)',
+            backgroundColor: 'var(--vml-panel-hover)',
+          }}
+        >
+          <ExperimentPdfActions pdf={expAssets.pdf} variant="card" />
         </div>
-
-        {exp.available && (
-          <div
-            className="flex flex-wrap items-center justify-between gap-2 text-xs"
-            style={{ color: 'var(--vml-text-muted)' }}
-          >
-            <div className="flex flex-wrap items-center gap-1">
-              <span>Attempts: {attemptCount}</span>
-              {isLearnDone && (
-                <span
-                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                  style={{
-                    backgroundColor: 'var(--vml-panel-hover)',
-                    border: '1px solid var(--vml-border)',
-                  }}
-                >
-                  Learn completed
-                </span>
-              )}
-              {isRunDone && (
-                <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
-                  Run completed
-                </span>
-              )}
-              {isObserveDone && (
-                <span
-                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                  style={{
-                    backgroundColor: 'var(--vml-panel-hover)',
-                    border: '1px solid var(--vml-border)',
-                  }}
-                >
-                  Run practised (pre-wired)
-                </span>
-              )}
-              {usedSol && (
-                <span
-                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                  style={{
-                    backgroundColor: 'var(--vml-panel-hover)',
-                    border: '1px solid var(--vml-border)',
-                  }}
-                >
-                  Used solution
-                </span>
-              )}
-            </div>
-            <span style={{ color: 'var(--vml-accent)' }} className="font-semibold">
-              Select →
-            </span>
-          </div>
-        )}
-      </button>
+      </article>
     );
   };
 
@@ -178,7 +195,10 @@ export function ExperimentPicker() {
               Choose a laboratory experiment to wire and test on the 3D bench.
             </p>
           </div>
-          <ThemeToggleButton />
+          <div className="flex flex-wrap items-center gap-2">
+            <CommonPdfLink pdf={ASSET_MANIFEST.commonPdf} />
+            <ThemeToggleButton />
+          </div>
         </header>
 
         <section aria-labelledby="group-transformers" className="space-y-3">

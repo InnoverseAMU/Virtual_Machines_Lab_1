@@ -1,0 +1,160 @@
+{
+  "experiments": {
+    "ex3.1": {
+      "pdf": {
+        "src": "experiments/ex3-1/ex-3-1.pdf",
+        "title": "Load test of single-phase transformer (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex3-1/diagrams/fig-3-1-1.png",
+          "caption": "Fig. 3.1.1 Circuit diagram for load-test of a transformer",
+          "alt": "Fig. 3.1.1 Circuit diagram for load-test of a transformer"
+        }
+      ]
+    },
+    "ex3.2": {
+      "pdf": {
+        "src": "experiments/ex3-2/ex-3-2.pdf",
+        "title": "Open-circuit and short-circuit tests of single-phase transformer (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex3-2/diagrams/fig-3-2-7.png",
+          "caption": "Fig. 3.2.7 Circuit diagram for open-circuit tests",
+          "alt": "Fig. 3.2.7 Circuit diagram for open-circuit tests"
+        },
+        {
+          "src": "experiments/ex3-2/diagrams/fig-3-2-8.png",
+          "caption": "Fig. 3.2.8 Circuit diagram for short-circuit tests",
+          "alt": "Fig. 3.2.8 Circuit diagram for short-circuit tests"
+        }
+      ]
+    },
+    "ex3.3": {
+      "pdf": {
+        "src": "experiments/ex3-3/ex-3-3.pdf",
+        "title": "Sumpner's test of single-phase transformer (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex3-3/diagrams/fig-3-3-1.png",
+          "caption": "Fig. 3.3.1 Circuit diagram for the Sumpner's test",
+          "alt": "Fig. 3.3.1 Circuit diagram for the Sumpner's test"
+        },
+        {
+          "src": "experiments/ex3-3/diagrams/fig-3-3-2.png",
+          "caption": "Fig. 3.3.2 Connection of wattmeter with a current transformer",
+          "alt": "Fig. 3.3.2 Connection of wattmeter with a current transformer"
+        }
+      ]
+    },
+    "ex3.4": {
+      "pdf": {
+        "src": "experiments/ex3-4/ex-3-4.pdf",
+        "title": "Parallel operation of single-phase transformers (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex3-4/diagrams/fig-3-4-2.png",
+          "caption": "Fig. 3.4.2 Circuit diagram for the parallel operation of transformers",
+          "alt": "Fig. 3.4.2 Circuit diagram for the parallel operation of transformers"
+        }
+      ]
+    },
+    "ex3.5": {
+      "pdf": {
+        "src": "experiments/ex3-5/ex-3-5.pdf",
+        "title": "Study of various three-phase transformer connections (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex3-5/diagrams/fig-3-5-1.png",
+          "caption": "Fig. 3.5.1 Star-connected winding",
+          "alt": "Fig. 3.5.1 Star-connected winding"
+        },
+        {
+          "src": "experiments/ex3-5/diagrams/fig-3-5-2.png",
+          "caption": "Fig. 3.5.2 Delta-connected winding",
+          "alt": "Fig. 3.5.2 Delta-connected winding"
+        },
+        {
+          "src": "experiments/ex3-5/diagrams/fig-3-5-3.png",
+          "caption": "Fig. 3.5.3 Zig-zag star connected winding",
+          "alt": "Fig. 3.5.3 Zig-zag star connected winding"
+        }
+      ]
+    },
+    "ex3.6": {
+      "pdf": {
+        "src": "experiments/ex3-6/ex-3-6.pdf",
+        "title": "Phase-transformation (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex3-6/diagrams/fig-3-6-1.png",
+          "caption": "Fig. 3.6.1 Three-phase to single-phase transformation",
+          "alt": "Fig. 3.6.1 Three-phase to single-phase transformation"
+        },
+        {
+          "src": "experiments/ex3-6/diagrams/fig-3-6-3.png",
+          "caption": "Fig. 3.6.3 Secondary winding connection for three-phase to six-phase transformation",
+          "alt": "Fig. 3.6.3 Secondary winding connection for three-phase to six-phase transformation"
+        },
+        {
+          "src": "experiments/ex3-6/diagrams/fig-3-6-4.png",
+          "caption": "Fig. 3.6.4 Scott-connected transformers",
+          "alt": "Fig. 3.6.4 Scott-connected transformers"
+        }
+      ]
+    },
+    "ex4.1": {
+      "pdf": {
+        "src": "experiments/ex4-1/ex-4-1.pdf",
+        "title": "Load test of three-phase induction motor (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex4-1/diagrams/fig-4-1-1.png",
+          "caption": "Fig. 4.1.1 Circuit for the load test of induction motor",
+          "alt": "Fig. 4.1.1 Circuit for the load test of induction motor"
+        }
+      ]
+    },
+    "ex4.2": {
+      "pdf": {
+        "src": "experiments/ex4-2/ex-4-2.pdf",
+        "title": "No-load and blocked-rotor tests of three-phase induction motor (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex4-2/diagrams/fig-4-2-5.png",
+          "caption": "Fig. 4.2.5 Circuit diagram for the no-load and blocked-rotor tests",
+          "alt": "Fig. 4.2.5 Circuit diagram for the no-load and blocked-rotor tests"
+        },
+        {
+          "src": "experiments/ex4-2/diagrams/fig-4-2-6.png",
+          "caption": "Fig. 4.2.6 Circuit diagram for the DC test",
+          "alt": "Fig. 4.2.6 Circuit diagram for the DC test"
+        }
+      ]
+    },
+    "ex4.5": {
+      "pdf": {
+        "src": "experiments/ex4-5/ex-4-5.pdf",
+        "title": "No-load and blocked-rotor test of single-phase capacitor-start induction motor (PDF)"
+      },
+      "diagrams": [
+        {
+          "src": "experiments/ex4-5/diagrams/fig-4-5-4.png",
+          "caption": "Fig. 4.5.4 Circuit diagram for the blocked-rotor and the no-load tests",
+          "alt": "Fig. 4.5.4 Circuit diagram for the blocked-rotor and the no-load tests"
+        }
+      ]
+    }
+  },
+  "commonPdf": {
+    "src": "experiments/common/general-instructions.pdf",
+    "title": "General instructions (PDF)"
+  }
+}
