@@ -4,18 +4,8 @@ import * as THREE from 'three';
 import type { ComponentInstance, Wire } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useWiringStore } from '../stores/wiringStore';
+import { NET_WIRE_COLORS } from '../theme/tokens';
 import { getTerminalWorldPos } from './terminalPos';
-
-const NET_COLORS = [
-  '#ef4444', // red
-  '#3b82f6', // blue
-  '#f59e0b', // amber
-  '#10b981', // emerald
-  '#a855f7', // purple
-  '#06b6d4', // cyan
-  '#ec4899', // pink
-  '#f97316', // orange
-];
 
 interface WireMeshProps {
   wire: Wire;
@@ -84,7 +74,8 @@ export function WireMesh({
 
   if (!geometry) return null;
 
-  const baseColor = NET_COLORS[Math.abs(netIndex) % NET_COLORS.length];
+  const baseColor =
+    NET_WIRE_COLORS[Math.abs(netIndex) % NET_WIRE_COLORS.length];
 
   return (
     <mesh

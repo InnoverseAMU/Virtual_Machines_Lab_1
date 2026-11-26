@@ -54,13 +54,15 @@ interface SessionState {
   hintLevel: number;
   validationResult: ValidationResult | null;
   showingSolution: boolean;
-  cameraPreset: CameraPreset;
+  cameraPreset: CameraPreset | null;
+  showTerminalLabels: boolean;
   toasts: RuntimeEvent[];
 
   goToScreen: (screen: AppScreen) => void;
   selectExperiment: (id: string) => void;
   setMode: (mode: LabMode) => void;
-  setCameraPreset: (preset: CameraPreset) => void;
+  setCameraPreset: (preset: CameraPreset | null) => void;
+  toggleTerminalLabels: () => void;
   submitWiring: (wires: Wire[]) => ValidationResult;
   retry: () => void;
   nextHint: () => void;
@@ -84,6 +86,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   validationResult: null,
   showingSolution: false,
   cameraPreset: 'overview',
+  showTerminalLabels: false,
   toasts: [],
 
   goToScreen: (screen) => set({ screen }),
@@ -100,6 +103,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setMode: (mode) => set({ mode }),
 
   setCameraPreset: (cameraPreset) => set({ cameraPreset }),
+
+  toggleTerminalLabels: () =>
+    set((state) => ({ showTerminalLabels: !state.showTerminalLabels })),
 
   submitWiring: (wires) => {
     const { experimentId, attempts, completedExperiments } = get();

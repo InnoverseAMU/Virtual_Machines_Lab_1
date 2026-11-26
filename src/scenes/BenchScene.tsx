@@ -10,7 +10,9 @@ import { buildNets } from '../core/circuit/nets';
 import { getExperiment } from '../core/experiments/registry';
 import type { CameraPreset, TransformerLoadOutput } from '../core/types';
 import { useSessionStore } from '../stores/sessionStore';
+import { useThemeStore } from '../stores/themeStore';
 import { useWiringStore } from '../stores/wiringStore';
+import { THEME_TOKENS } from '../theme/tokens';
 
 const CAMERA_PRESETS: Record<
   CameraPreset,
@@ -23,13 +25,35 @@ const CAMERA_PRESETS: Record<
   load: { pos: [3.6, 2.6, 3.4], target: [3.6, 0.4, -0.1] },
 };
 
+function tweenColor(
+  targetColor: THREE.Color,
+  hex: string,
+  duration: number,
+): void {
+  const dest = new THREE.Color(hex);
+  if (duration <= 0) {
+    targetColor.copy(dest);
+    return;
+  }
+  gsap.killTweensOf(targetColor);
+  gsap.to(targetColor, {
+    r: dest.r,
+    g: dest.g,
+    b: dest.b,
+    duration,
+    ease: 'power2.out',
+  });
+}
+
 function CameraController() {
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
+  const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const { camera } = useThree();
   const controlsRef = useRef<ComponentRef<typeof OrbitControls>>(null);
   const isFirstRender = useRef(true);
 
   useEffect(() => {
+    if (!cameraPreset) return;
     const preset = CAMERA_PRESETS[cameraPreset];
     const controls = controlsRef.current;
 
@@ -75,7 +99,140 @@ function CameraController() {
       maxDistance={15}
       maxPolarAngle={Math.PI * 0.48}
       minPolarAngle={0.15}
+      onStart={() => {
+        gsap.killTweensOf(camera.position);
+        if (controlsRef.current) {
+          gsap.killTweensOf(controlsRef.current.target);
+        }
+        if (useSessionStore.getState().cameraPreset !== null) {
+          setCameraPreset(null);
+        }
+      }}
     />
+  );
+}
+
+interface ThemedEnvironmentProps {
+  benchTopMat: THREE.MeshStandardMaterial;
+  benchEdgeMat: THREE.MeshStandardMaterial;
+  benchLegMat: THREE.MeshStandardMaterial;
+  floorMat: THREE.MeshStandardMaterial;
+}
+
+function ThemedEnvironment({
+  benchTopMat,
+  benchEdgeMat,
+  benchLegMat,
+  floorMat,
+}: ThemedEnvironmentProps) {
+  const resolved = useThemeStore((s) => s.resolved);
+  const { scene } = useThree();
+  const ambientRef = useRef<THREE.AmbientLight>(null);
+  const hemiRef = useRef<THREE.HemisphereLight>(null);
+  const keyRef = useRef<THREE.DirectionalLight>(null);
+  const fillRef = useRef<THREE.DirectionalLight>(null);
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    const tokens = THEME_TOKENS[resolved].scene;
+    const duration = isFirstRender.current ? 0 : 0.3;
+    isFirstRender.current = false;
+
+    if (scene.background instanceof THREE.Color) {
+      tweenColor(scene.background, tokens.background, duration);
+    } else {
+      scene.background = new THREE.Color(tokens.background);
+    }
+
+    if (scene.fog instanceof THREE.Fog) {
+      tweenColor(scene.fog.color, tokens.fog, duration);
+    }
+
+    tweenColor(benchTopMat.color, tokens.benchTop, duration);
+    tweenColor(benchEdgeMat.color, tokens.benchEdge, duration);
+    tweenColor(benchLegMat.color, tokens.benchLegs, duration);
+    tweenColor(floorMat.color, tokens.floor, duration);
+
+    const animateLight = (
+      light: THREE.Light | null,
+      hex: string,
+      intensity: number,
+    ) => {
+      if (!light) return;
+      tweenColor(light.color, hex, duration);
+      if (duration <= 0) {
+        light.intensity = intensity;
+      } else {
+        gsap.killTweensOf(light);
+        gsap.to(light, { intensity, duration, ease: 'power2.out' });
+      }
+    };
+
+    animateLight(ambientRef.current, tokens.ambientColor, tokens.ambientIntensity);
+    animateLight(keyRef.current, tokens.keyLightColor, tokens.keyLightIntensity);
+    animateLight(fillRef.current, tokens.fillLightColor, tokens.fillLightIntensity);
+
+    if (hemiRef.current) {
+      const hemi = hemiRef.current;
+      tweenColor(hemi.color, tokens.hemisphereSky, duration);
+      tweenColor(hemi.groundColor, tokens.hemisphereGround, duration);
+      if (duration <= 0) {
+        hemi.intensity = tokens.hemisphereIntensity;
+      } else {
+        gsap.killTweensOf(hemi);
+        gsap.to(hemi, {
+          intensity: tokens.hemisphereIntensity,
+          duration,
+          ease: 'power2.out',
+        });
+      }
+    }
+  }, [resolved, scene, benchTopMat, benchEdgeMat, benchLegMat, floorMat]);
+
+  const initialTokens = useMemo(
+    () => THEME_TOKENS[useThemeStore.getState().resolved].scene,
+    [],
+  );
+
+  return (
+    <>
+      <color attach="background" args={[initialTokens.background]} />
+      <fog attach="fog" args={[initialTokens.fog, 14, 30]} />
+
+      <ambientLight
+        ref={ambientRef}
+        color={initialTokens.ambientColor}
+        intensity={initialTokens.ambientIntensity}
+      />
+      <hemisphereLight
+        ref={hemiRef}
+        color={initialTokens.hemisphereSky}
+        groundColor={initialTokens.hemisphereGround}
+        intensity={initialTokens.hemisphereIntensity}
+      />
+      <directionalLight
+        ref={keyRef}
+        position={[4, 8, 6]}
+        color={initialTokens.keyLightColor}
+        intensity={initialTokens.keyLightIntensity}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-near={1}
+        shadow-camera-far={24}
+        shadow-camera-left={-7}
+        shadow-camera-right={7}
+        shadow-camera-top={5}
+        shadow-camera-bottom={-5}
+        shadow-bias={-0.0004}
+      />
+      <directionalLight
+        ref={fillRef}
+        position={[-6, 4, -4]}
+        color={initialTokens.fillLightColor}
+        intensity={initialTokens.fillLightIntensity}
+      />
+    </>
   );
 }
 
@@ -104,47 +261,83 @@ export function BenchScene({ labOutput }: BenchSceneProps) {
     });
   }, [wires, netGraph]);
 
+  const benchMaterials = useMemo(() => {
+    const init = THEME_TOKENS[useThemeStore.getState().resolved].scene;
+    return {
+      benchTopMat: new THREE.MeshStandardMaterial({
+        color: init.benchTop,
+        roughness: 0.78,
+        metalness: 0.04,
+      }),
+      benchEdgeMat: new THREE.MeshStandardMaterial({
+        color: init.benchEdge,
+        roughness: 0.4,
+        metalness: 0.6,
+      }),
+      benchLegMat: new THREE.MeshStandardMaterial({
+        color: init.benchLegs,
+        roughness: 0.6,
+        metalness: 0.4,
+      }),
+      floorMat: new THREE.MeshStandardMaterial({
+        color: init.floor,
+        roughness: 0.95,
+      }),
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      benchMaterials.benchTopMat.dispose();
+      benchMaterials.benchEdgeMat.dispose();
+      benchMaterials.benchLegMat.dispose();
+      benchMaterials.floorMat.dispose();
+    };
+  }, [benchMaterials]);
+
   return (
     <Canvas
       shadows
       dpr={[1, 2]}
-      camera={{ position: CAMERA_PRESETS.overview.pos, fov: 42, near: 0.1, far: 60 }}
-      gl={{ toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
+      camera={{
+        position: CAMERA_PRESETS.overview.pos,
+        fov: 42,
+        near: 0.1,
+        far: 60,
+      }}
+      gl={{
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.05,
+      }}
       onPointerMissed={() => clearSelectedTerminal()}
       className="h-full w-full"
     >
-      <color attach="background" args={['#0f172a']} />
-      <fog attach="fog" args={['#0f172a', 14, 30]} />
-
-      <ambientLight intensity={0.55} />
-      <directionalLight
-        position={[4, 8, 6]}
-        intensity={1.55}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-near={1}
-        shadow-camera-far={24}
-        shadow-camera-left={-7}
-        shadow-camera-right={7}
-        shadow-camera-top={5}
-        shadow-camera-bottom={-5}
-        shadow-bias={-0.0004}
+      <ThemedEnvironment
+        benchTopMat={benchMaterials.benchTopMat}
+        benchEdgeMat={benchMaterials.benchEdgeMat}
+        benchLegMat={benchMaterials.benchLegMat}
+        floorMat={benchMaterials.floorMat}
       />
-      <directionalLight position={[-6, 4, -4]} intensity={0.45} color="#93c5fd" />
 
       <CameraController />
 
       {/* Lab benchtop */}
       <group>
-        <mesh position={[0.1, -0.09, -0.05]} receiveShadow castShadow>
+        <mesh
+          position={[0.1, -0.09, -0.05]}
+          receiveShadow
+          castShadow
+          material={benchMaterials.benchTopMat}
+        >
           <boxGeometry args={[11.4, 0.18, 3.5]} />
-          <meshStandardMaterial color="#3b2f26" roughness={0.75} metalness={0.05} />
         </mesh>
         {/* Front bench edge trim */}
-        <mesh position={[0.1, -0.09, 1.71]} receiveShadow>
+        <mesh
+          position={[0.1, -0.09, 1.71]}
+          receiveShadow
+          material={benchMaterials.benchEdgeMat}
+        >
           <boxGeometry args={[11.4, 0.18, 0.04]} />
-          <meshStandardMaterial color="#64748b" roughness={0.4} metalness={0.6} />
         </mesh>
         {/* Bench legs */}
         {[
@@ -153,9 +346,14 @@ export function BenchScene({ labOutput }: BenchSceneProps) {
           [-5.2, -1.18, 1.4],
           [5.4, -1.18, 1.4],
         ].map(([x, y, z], i) => (
-          <mesh key={i} position={[x, y, z]} castShadow receiveShadow>
+          <mesh
+            key={i}
+            position={[x, y, z]}
+            castShadow
+            receiveShadow
+            material={benchMaterials.benchLegMat}
+          >
             <boxGeometry args={[0.16, 2.0, 0.16]} />
-            <meshStandardMaterial color="#1e293b" roughness={0.6} metalness={0.4} />
           </mesh>
         ))}
         {/* Lab room floor */}
@@ -163,9 +361,9 @@ export function BenchScene({ labOutput }: BenchSceneProps) {
           position={[0, -2.18, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
           receiveShadow
+          material={benchMaterials.floorMat}
         >
           <planeGeometry args={[40, 40]} />
-          <meshStandardMaterial color="#0b1120" roughness={0.95} />
         </mesh>
       </group>
 
