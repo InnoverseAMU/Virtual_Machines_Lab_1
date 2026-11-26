@@ -54,10 +54,12 @@ function evaluateAgainstNetlist(
       const label = experiment.netLabels?.[reqIdx] ?? `Net ${reqIdx + 1}`;
       const category =
         experiment.netCategories?.[reqIdx] ?? `${label} is incomplete`;
+      const categoryKey = experiment.netCategoryKeys?.[reqIdx];
       openNets.push({
         netIndex: reqIdx,
         label,
         category,
+        categoryKey,
         missingPairHint,
       });
     }

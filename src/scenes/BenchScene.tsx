@@ -7,11 +7,12 @@ import * as THREE from 'three';
 import { ComponentRenderer } from '../components3d/ComponentRenderer';
 import { WireMesh } from '../components3d/Wire';
 import { buildNets } from '../core/circuit/nets';
-import { getExperiment } from '../core/experiments/registry';
+import { getExperiment, netlistToWirePairs } from '../core/experiments/registry';
 import type {
   CameraPreset,
   ConnectionState,
   TransformerLoadOutput,
+  Wire,
 } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
@@ -251,6 +252,7 @@ interface BenchSceneProps {
 
 export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
   const experimentId = useSessionStore((s) => s.experimentId);
+  const showingSolution = useSessionStore((s) => s.showingSolution);
   const wires = useWiringStore((s) => s.wires);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
 
@@ -269,6 +271,24 @@ export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
       return { wire: w, netIdx, idxInNet };
     });
   }, [wires, netGraph]);
+
+  const ghostWireMeta = useMemo(() => {
+    if (!showingSolution) return [];
+    const pairs = netlistToWirePairs(experiment.acceptedNetlists[0]);
+    const ghostWires: Wire[] = pairs.map(([a, b], idx) => ({
+      id: `ghost_${idx}_${a}_${b}`,
+      a,
+      b,
+    }));
+    const ghostGraph = buildNets(experiment.components, ghostWires);
+    const countPerNet = new Map<number, number>();
+    return ghostWires.map((w) => {
+      const netIdx = ghostGraph.terminalToNetIndex.get(w.a) ?? 0;
+      const idxInNet = countPerNet.get(netIdx) ?? 0;
+      countPerNet.set(netIdx, idxInNet + 1);
+      return { wire: w, netIdx, idxInNet };
+    });
+  }, [showingSolution, experiment]);
 
   const benchMaterials = useMemo(() => {
     const init = THEME_TOKENS[useThemeStore.getState().resolved].scene;
@@ -399,7 +419,7 @@ export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
         </group>
       ))}
 
-      {/* Student / solution wires */}
+      {/* Student wires */}
       {wireMeta.map(({ wire, netIdx, idxInNet }) => (
         <WireMesh
           key={wire.id}
@@ -407,6 +427,19 @@ export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
           components={experiment.components}
           netIndex={netIdx}
           wireIndexInNet={idxInNet}
+        />
+      ))}
+
+      {/* Canonical Netlist A ghost solution overlay */}
+      {ghostWireMeta.map(({ wire, netIdx, idxInNet }) => (
+        <WireMesh
+          key={wire.id}
+          wire={wire}
+          components={experiment.components}
+          netIndex={netIdx}
+          wireIndexInNet={idxInNet}
+          ghost
+          readOnly
         />
       ))}
     </Canvas>

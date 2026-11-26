@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { getExperiment } from '../core/experiments/registry';
 import { validateWiring } from '../core/circuit/validate';
+import { getExperiment } from '../core/experiments/registry';
 import type {
   CameraPreset,
   RuntimeEvent,
@@ -34,12 +34,19 @@ function savePref(key: string, value: string): void {
 interface StoredProgress {
   attempts: Record<string, number>;
   completedExperiments: string[];
+  usedSolutionByExperiment: Record<string, boolean>;
 }
 
 function loadProgress(): StoredProgress {
   try {
     const raw = window.localStorage.getItem(PROGRESS_STORAGE_KEY);
-    if (!raw) return { attempts: {}, completedExperiments: [] };
+    if (!raw) {
+      return {
+        attempts: {},
+        completedExperiments: [],
+        usedSolutionByExperiment: {},
+      };
+    }
     const parsed = JSON.parse(raw) as Partial<StoredProgress>;
     return {
       attempts:
@@ -49,9 +56,18 @@ function loadProgress(): StoredProgress {
       completedExperiments: Array.isArray(parsed.completedExperiments)
         ? parsed.completedExperiments
         : [],
+      usedSolutionByExperiment:
+        parsed.usedSolutionByExperiment &&
+        typeof parsed.usedSolutionByExperiment === 'object'
+          ? parsed.usedSolutionByExperiment
+          : {},
     };
   } catch {
-    return { attempts: {}, completedExperiments: [] };
+    return {
+      attempts: {},
+      completedExperiments: [],
+      usedSolutionByExperiment: {},
+    };
   }
 }
 
@@ -72,8 +88,11 @@ interface SessionState {
   mode: LabMode;
   attempts: Record<string, number>;
   completedExperiments: string[];
+  usedSolutionByExperiment: Record<string, boolean>;
   hintLevel: number;
+  usedSolutionInRun: boolean;
   validationResult: ValidationResult | null;
+  resultModalOpen: boolean;
   showingSolution: boolean;
   cameraPreset: CameraPreset | null;
   showTerminalLabels: boolean;
@@ -91,8 +110,11 @@ interface SessionState {
   toggleNumericReadouts: () => void;
   submitWiring: (wires: Wire[]) => ValidationResult;
   retry: () => void;
+  openLastResult: () => void;
+  closeResultModal: () => void;
   nextHint: () => void;
-  setShowingSolution: (showing: boolean) => void;
+  activateSolutionView: () => void;
+  exitSolutionView: () => void;
   pushToast: (event: RuntimeEvent) => void;
   dismissToast: (id: string) => void;
   clearToasts: () => void;
@@ -102,14 +124,16 @@ interface SessionState {
 const initialProgress = loadProgress();
 
 export const useSessionStore = create<SessionState>((set, get) => ({
-  // Start directly on the lab bench during 2a; 2c starts at 'picker'
-  screen: 'lab',
+  screen: 'picker',
   experimentId: 'ex3.1',
   mode: 'self',
   attempts: initialProgress.attempts,
   completedExperiments: initialProgress.completedExperiments,
+  usedSolutionByExperiment: initialProgress.usedSolutionByExperiment,
   hintLevel: 0,
+  usedSolutionInRun: false,
   validationResult: null,
+  resultModalOpen: false,
   showingSolution: false,
   cameraPreset: 'overview',
   showTerminalLabels: false,
@@ -127,9 +151,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({
       experimentId,
       hintLevel: 0,
+      usedSolutionInRun: false,
       validationResult: null,
+      resultModalOpen: false,
       showingSolution: false,
       cameraPreset: 'overview',
+      toasts: [],
     }),
 
   setMode: (mode) => set({ mode }),
@@ -159,7 +186,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }),
 
   submitWiring: (wires) => {
-    const { experimentId, attempts, completedExperiments } = get();
+    const {
+      experimentId,
+      attempts,
+      completedExperiments,
+      usedSolutionByExperiment,
+      usedSolutionInRun,
+    } = get();
     const experiment = getExperiment(experimentId);
     const result = validateWiring(experiment, wires);
 
@@ -171,16 +204,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       result.correct && !completedExperiments.includes(experimentId)
         ? [...completedExperiments, experimentId]
         : completedExperiments;
+    const nextUsedSolution = {
+      ...usedSolutionByExperiment,
+      ...(result.correct
+        ? {
+            [experimentId]:
+              Boolean(usedSolutionByExperiment[experimentId]) || usedSolutionInRun,
+          }
+        : {}),
+    };
 
     saveProgress({
       attempts: nextAttempts,
       completedExperiments: nextCompleted,
+      usedSolutionByExperiment: nextUsedSolution,
     });
 
     set({
       attempts: nextAttempts,
       completedExperiments: nextCompleted,
+      usedSolutionByExperiment: nextUsedSolution,
       validationResult: result,
+      resultModalOpen: true,
       showingSolution: false,
     });
     return result;
@@ -188,9 +233,16 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   retry: () =>
     set({
-      validationResult: null,
+      resultModalOpen: false,
       showingSolution: false,
     }),
+
+  openLastResult: () =>
+    set((state) =>
+      state.validationResult ? { resultModalOpen: true } : state,
+    ),
+
+  closeResultModal: () => set({ resultModalOpen: false }),
 
   nextHint: () =>
     set((state) => {
@@ -201,7 +253,14 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       };
     }),
 
-  setShowingSolution: (showingSolution) => set({ showingSolution }),
+  activateSolutionView: () =>
+    set({
+      showingSolution: true,
+      usedSolutionInRun: true,
+      resultModalOpen: false,
+    }),
+
+  exitSolutionView: () => set({ showingSolution: false }),
 
   pushToast: (event) =>
     set((state) => {
@@ -219,7 +278,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   resetLabSession: () =>
     set({
       hintLevel: 0,
+      usedSolutionInRun: false,
       validationResult: null,
+      resultModalOpen: false,
       showingSolution: false,
       cameraPreset: 'overview',
       toasts: [],

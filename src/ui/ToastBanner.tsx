@@ -9,7 +9,7 @@ export function ToastBanner() {
   return (
     <div
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 top-14 z-30 flex flex-col items-center gap-2 px-3 md:top-16"
+      className="pointer-events-none absolute inset-x-0 top-24 z-30 flex flex-col items-center gap-2 px-3 md:top-16"
     >
       {toasts.map((toast) => {
         const bg =

@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getExperiment } from './core/experiments/registry';
 import { evaluateExperimentPhysics } from './core/physics/evaluate';
 import type { CameraPreset } from './core/types';
 import { BenchScene } from './scenes/BenchScene';
 import { useControlsStore } from './stores/controlsStore';
 import { useSessionStore } from './stores/sessionStore';
-import { useThemeStore } from './stores/themeStore';
 import { useWiringStore } from './stores/wiringStore';
-import type { ThemeMode } from './theme/tokens';
+import { ExperimentPicker } from './ui/ExperimentPicker';
+import { Modal } from './ui/Modal';
+import { ModeSelect } from './ui/ModeSelect';
+import { ResultModal } from './ui/ResultModal';
 import { RightSidebar } from './ui/RightSidebar';
+import { SolutionBanner } from './ui/SolutionBanner';
+import { ThemeToggleButton } from './ui/ThemeToggleButton';
 import { ToastBanner } from './ui/ToastBanner';
 
 const PRESET_BUTTONS: { id: CameraPreset; label: string }[] = [
@@ -19,68 +23,38 @@ const PRESET_BUTTONS: { id: CameraPreset; label: string }[] = [
   { id: 'load', label: 'Load' },
 ];
 
-const MODE_LABELS: Record<ThemeMode, string> = {
-  system: 'System',
-  light: 'Light',
-  dark: 'Dark',
-};
-
 const STICKY_EVENT_IDS = new Set([
   'mcb-trip',
   'power-on-non-zero',
   'wiring-blocked',
 ]);
 
-function ThemeIcon({
-  mode,
-  resolved,
-}: {
-  mode: ThemeMode;
-  resolved: 'light' | 'dark';
-}) {
-  if (mode === 'light' || (mode === 'system' && resolved === 'light')) {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        className="h-3.5 w-3.5"
-      >
-        <circle cx="12" cy="12" r="4" />
-        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      className="h-3.5 w-3.5"
-    >
-      <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" />
-    </svg>
-  );
-}
-
 export function App() {
+  const [confirmAction, setConfirmAction] = useState<'back' | 'reset' | null>(
+    null,
+  );
+
+  const screen = useSessionStore((s) => s.screen);
   const experimentId = useSessionStore((s) => s.experimentId);
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
-  const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
-  const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
   const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
+  const validationResult = useSessionStore((s) => s.validationResult);
+
+  const goToScreen = useSessionStore((s) => s.goToScreen);
+  const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
+  const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar);
+  const submitWiring = useSessionStore((s) => s.submitWiring);
+  const openLastResult = useSessionStore((s) => s.openLastResult);
   const pushToast = useSessionStore((s) => s.pushToast);
   const dismissToast = useSessionStore((s) => s.dismissToast);
+  const resetLabSession = useSessionStore((s) => s.resetLabSession);
 
   const wires = useWiringStore((s) => s.wires);
   const selectedTerminal = useWiringStore((s) => s.selectedTerminal);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
+  const clearAllWires = useWiringStore((s) => s.clearAllWires);
 
   const supplyOn = useControlsStore((s) => s.supplyOn);
   const variacV = useControlsStore((s) => s.variacV);
@@ -91,10 +65,6 @@ export function App() {
   const tripMcb = useControlsStore((s) => s.tripMcb);
   const setFocusedControl = useControlsStore((s) => s.setFocusedControl);
   const initFromControls = useControlsStore((s) => s.initFromControls);
-
-  const themeMode = useThemeStore((s) => s.mode);
-  const resolvedTheme = useThemeStore((s) => s.resolved);
-  const cycleThemeMode = useThemeStore((s) => s.cycleMode);
 
   const experiment = useMemo(() => getExperiment(experimentId), [experimentId]);
 
@@ -115,6 +85,7 @@ export function App() {
 
   const prevEventIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    if (screen !== 'lab') return;
     const { mcbTripped, events } = evaluation.output;
     if (mcbTripped) {
       tripMcb();
@@ -135,7 +106,7 @@ export function App() {
     }
 
     prevEventIdsRef.current = currentIds;
-  }, [evaluation.output, tripMcb, pushToast, dismissToast]);
+  }, [screen, evaluation.output, tripMcb, pushToast, dismissToast]);
 
   useEffect(() => {
     if (supplyOn && !evaluation.output.mcbTripped) {
@@ -144,6 +115,7 @@ export function App() {
   }, [supplyOn, evaluation.output.mcbTripped, dismissToast]);
 
   useEffect(() => {
+    if (screen !== 'lab') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (
         e.target instanceof HTMLInputElement ||
@@ -174,11 +146,36 @@ export function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    screen,
     clearSelectedTerminal,
     setFocusedControl,
     toggleTerminalLabels,
     toggleSidebar,
   ]);
+
+  const performResetBench = useCallback(() => {
+    initFromControls(experiment.controls);
+    clearAllWires(false);
+    resetLabSession();
+    prevEventIdsRef.current.clear();
+  }, [initFromControls, experiment.controls, clearAllWires, resetLabSession]);
+
+  const handleBackClick = () => {
+    if (wires.length > 0) {
+      setConfirmAction('back');
+      return;
+    }
+    performResetBench();
+    goToScreen('picker');
+  };
+
+  if (screen === 'picker') {
+    return <ExperimentPicker />;
+  }
+
+  if (screen === 'mode') {
+    return <ModeSelect />;
+  }
 
   return (
     <div className="fixed inset-0 flex overflow-hidden select-none">
@@ -189,8 +186,65 @@ export function App() {
           connectionState={evaluation.connectionState}
         />
 
-        {/* Top bar: camera presets, theme toggle, terminal labels, sidebar toggle */}
-        <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex flex-wrap items-center justify-center gap-2 px-3">
+        {/* Top bar */}
+        <div className="pointer-events-none absolute inset-x-0 top-2.5 z-20 flex flex-wrap items-center justify-between gap-2 px-2.5 md:px-3">
+          {/* Left group: Back + self-mode primary actions */}
+          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleBackClick}
+              className="rounded-full px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur transition"
+              style={{
+                backgroundColor: 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: 'var(--vml-text)',
+              }}
+            >
+              ← Back
+            </button>
+
+            <button
+              type="button"
+              onClick={() => submitWiring(wires)}
+              className="rounded-full px-3.5 py-1.5 text-xs font-bold shadow-lg transition"
+              style={{
+                backgroundColor: 'var(--vml-accent)',
+                color: 'var(--vml-accent-text)',
+              }}
+            >
+              Submit
+            </button>
+
+            {validationResult && (
+              <button
+                type="button"
+                onClick={openLastResult}
+                className="rounded-full px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur transition"
+                style={{
+                  backgroundColor: 'var(--vml-panel)',
+                  border: '1px solid var(--vml-border)',
+                  color: 'var(--vml-text)',
+                }}
+              >
+                Last result
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setConfirmAction('reset')}
+              className="rounded-full px-3 py-1.5 text-xs font-semibold shadow-lg backdrop-blur transition"
+              style={{
+                backgroundColor: 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: 'var(--vml-text)',
+              }}
+            >
+              Reset
+            </button>
+          </div>
+
+          {/* Center group: camera presets */}
           <div
             className="pointer-events-auto flex flex-wrap items-center gap-1 rounded-full p-1 shadow-lg backdrop-blur"
             style={{
@@ -206,7 +260,7 @@ export function App() {
                   key={p.id}
                   type="button"
                   onClick={() => setCameraPreset(p.id)}
-                  className="rounded-full px-3 py-1 text-xs font-medium transition"
+                  className="rounded-full px-2.5 py-1 text-xs font-medium transition"
                   style={{
                     backgroundColor: active
                       ? 'var(--vml-accent)'
@@ -222,84 +276,129 @@ export function App() {
             })}
           </div>
 
-          <button
-            type="button"
-            onClick={cycleThemeMode}
-            aria-label={`Color theme: ${MODE_LABELS[themeMode]} (${resolvedTheme}). Click to cycle system, light, dark.`}
-            className="pointer-events-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
-            style={{
-              backgroundColor: 'var(--vml-panel)',
-              border: '1px solid var(--vml-border)',
-              color: 'var(--vml-text)',
-            }}
-          >
-            <ThemeIcon mode={themeMode} resolved={resolvedTheme} />
-            <span>{MODE_LABELS[themeMode]}</span>
-          </button>
+          {/* Right group: theme, labels, sidebar, wire count */}
+          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+            <ThemeToggleButton />
 
-          <button
-            type="button"
-            onClick={toggleTerminalLabels}
-            aria-pressed={showTerminalLabels}
-            className="pointer-events-auto rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
-            style={{
-              backgroundColor: showTerminalLabels
-                ? 'var(--vml-accent)'
-                : 'var(--vml-panel)',
-              border: '1px solid var(--vml-border)',
-              color: showTerminalLabels
-                ? 'var(--vml-accent-text)'
-                : 'var(--vml-text)',
-            }}
-          >
-            Labels (L): {showTerminalLabels ? 'On' : 'Off'}
-          </button>
+            <button
+              type="button"
+              onClick={toggleTerminalLabels}
+              aria-pressed={showTerminalLabels}
+              className="rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+              style={{
+                backgroundColor: showTerminalLabels
+                  ? 'var(--vml-accent)'
+                  : 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: showTerminalLabels
+                  ? 'var(--vml-accent-text)'
+                  : 'var(--vml-text)',
+              }}
+            >
+              Labels (L)
+            </button>
 
-          <button
-            type="button"
-            onClick={toggleSidebar}
-            aria-label={sidebarOpen ? 'Hide sidebar (S)' : 'Show sidebar (S)'}
-            aria-expanded={sidebarOpen}
-            className="pointer-events-auto rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
-            style={{
-              backgroundColor: sidebarOpen
-                ? 'var(--vml-accent)'
-                : 'var(--vml-panel)',
-              border: '1px solid var(--vml-border)',
-              color: sidebarOpen
-                ? 'var(--vml-accent-text)'
-                : 'var(--vml-text)',
-            }}
-          >
-            Panel (S)
-          </button>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label={sidebarOpen ? 'Hide sidebar (S)' : 'Show sidebar (S)'}
+              aria-expanded={sidebarOpen}
+              className="rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur transition"
+              style={{
+                backgroundColor: sidebarOpen
+                  ? 'var(--vml-accent)'
+                  : 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: sidebarOpen
+                  ? 'var(--vml-accent-text)'
+                  : 'var(--vml-text)',
+              }}
+            >
+              Panel (S)
+            </button>
 
-          <div
-            className="hidden rounded-full px-3 py-1.5 text-xs shadow-lg backdrop-blur lg:block"
-            style={{
-              backgroundColor: 'var(--vml-panel)',
-              border: '1px solid var(--vml-border)',
-              color: 'var(--vml-text-muted)',
-            }}
-          >
-            {selectedTerminal ? (
-              <span>
-                Selected:{' '}
-                <strong style={{ color: 'var(--vml-accent)' }}>
-                  {selectedTerminal}
-                </strong>{' '}
-                (click target terminal or Esc)
-              </span>
-            ) : (
-              <span>Wires: {wires.length}</span>
-            )}
+            <div
+              className="hidden rounded-full px-3 py-1.5 text-xs shadow-lg backdrop-blur xl:block"
+              style={{
+                backgroundColor: 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: 'var(--vml-text-muted)',
+              }}
+            >
+              {selectedTerminal ? (
+                <span>
+                  Selected:{' '}
+                  <strong style={{ color: 'var(--vml-accent)' }}>
+                    {selectedTerminal}
+                  </strong>
+                </span>
+              ) : (
+                <span>Wires: {wires.length}</span>
+              )}
+            </div>
           </div>
         </div>
 
         <ToastBanner />
+        <SolutionBanner experiment={experiment} />
       </div>
 
       <RightSidebar controls={experiment.controls} output={evaluation.output} />
+
+      <ResultModal
+        experiment={experiment}
+        onRequestReset={() => setConfirmAction('reset')}
+      />
+
+      <Modal
+        open={confirmAction !== null}
+        onClose={() => setConfirmAction(null)}
+        titleId="confirm-action-title"
+        maxWidthClass="max-w-sm"
+      >
+        <div className="space-y-4">
+          <h2 id="confirm-action-title" className="text-base font-bold">
+            {confirmAction === 'back'
+              ? 'Leave bench and discard wiring?'
+              : 'Reset the bench?'}
+          </h2>
+          <p
+            className="text-xs leading-relaxed"
+            style={{ color: 'var(--vml-text-muted)' }}
+          >
+            {confirmAction === 'back'
+              ? 'You have wires placed on the bench. Returning to the experiment picker will clear your current wiring and controls.'
+              : 'This clears all wires, selected terminals, supply switch, variac knob, wattmeter ranges, lamp switches, MCB trip, meter damage, and notifications.'}
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmAction(null)}
+              className="rounded-lg px-3.5 py-2 text-xs font-semibold"
+              style={{
+                backgroundColor: 'var(--vml-panel-hover)',
+                border: '1px solid var(--vml-border)',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const action = confirmAction;
+                setConfirmAction(null);
+                performResetBench();
+                if (action === 'back') {
+                  goToScreen('picker');
+                }
+              }}
+              className="rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-500"
+            >
+              {confirmAction === 'back' ? 'Leave bench' : 'Reset bench'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

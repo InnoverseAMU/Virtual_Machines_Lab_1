@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { getComponentDef } from '../core/components';
 import { ex3_1 } from '../core/experiments/ex3_1';
-import { EXPERIMENTS } from '../core/experiments/registry';
+import {
+  EXPERIMENT_SUMMARIES,
+  EXPERIMENTS,
+} from '../core/experiments/registry';
 import { ExperimentDefSchema } from '../core/experiments/schema';
 import type { FaultClause, TerminalId } from '../core/types';
 
@@ -60,5 +63,44 @@ describe('Experiment schema and terminal integrity', () => {
     // All apparatus terminals are accounted for in Netlist A
     const netATerminals = new Set(ex3_1.acceptedNetlists[0].flat());
     expect(netATerminals.size).toBe(validTerminals.size);
+  });
+
+  it('registry lists all 9 manual experiments with exact ids, titles, and only ex3.1 available', () => {
+    expect(EXPERIMENT_SUMMARIES).toHaveLength(9);
+    const available = EXPERIMENT_SUMMARIES.filter((e) => e.available);
+    expect(available).toHaveLength(1);
+    expect(available[0].id).toBe('ex3.1');
+
+    const expected: Array<[string, string, string]> = [
+      ['ex3.1', '3.1', 'Load test of single-phase transformer'],
+      [
+        'ex3.2',
+        '3.2',
+        'Open-circuit and short-circuit tests of single-phase transformer',
+      ],
+      ['ex3.3', '3.3', "Sumpner's test of single-phase transformer"],
+      ['ex3.4', '3.4', 'Parallel operation of single-phase transformers'],
+      [
+        'ex3.5',
+        '3.5',
+        'Study of various three-phase transformer connections',
+      ],
+      ['ex3.6', '3.6', 'Phase-transformation'],
+      ['ex4.1', '4.1', 'Load test of three-phase induction motor'],
+      [
+        'ex4.2',
+        '4.2',
+        'No-load and blocked-rotor tests of three-phase induction motor',
+      ],
+      [
+        'ex4.5',
+        '4.5',
+        'No-load and blocked-rotor test of single-phase capacitor-start induction motor',
+      ],
+    ];
+
+    expect(
+      EXPERIMENT_SUMMARIES.map((e) => [e.id, e.number, e.title]),
+    ).toEqual(expected);
   });
 });

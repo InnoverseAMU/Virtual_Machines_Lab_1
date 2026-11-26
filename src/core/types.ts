@@ -120,6 +120,13 @@ export interface ColumnDef {
   unit?: string;
 }
 
+export type NetCategoryKey =
+  | 'supply'
+  | 'primary'
+  | 'wattmeter'
+  | 'secondary'
+  | 'load';
+
 export interface ExperimentDef {
   id: string;
   title: string;
@@ -128,6 +135,7 @@ export interface ExperimentDef {
   acceptedNetlists: Net[][];
   netLabels?: string[];
   netCategories?: string[];
+  netCategoryKeys?: NetCategoryKey[];
   faultPatterns: FaultPattern[];
   controls: ControlDef[];
   physicsModel: string;
@@ -140,8 +148,9 @@ export interface ExperimentDef {
 
 export interface ExperimentSummary {
   id: string;
+  number: string;
   title: string;
-  subtitle: string;
+  group: 'transformers' | 'induction';
   available: boolean;
 }
 
@@ -149,6 +158,7 @@ export interface OpenNetIssue {
   netIndex: number;
   label: string;
   category: string;
+  categoryKey?: NetCategoryKey;
   missingPairHint: [TerminalId, TerminalId];
 }
 

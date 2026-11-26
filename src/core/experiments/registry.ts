@@ -14,20 +14,66 @@ export const EXPERIMENTS: Record<string, ExperimentDef> = Object.fromEntries(
 export const EXPERIMENT_SUMMARIES: ExperimentSummary[] = [
   {
     id: 'ex3.1',
-    title: 'Exp 3.1: Load test of single-phase transformer',
-    subtitle: 'Voltage regulation & efficiency using a 2 kVA 230/115 V transformer and lamp bank',
+    number: '3.1',
+    title: 'Load test of single-phase transformer',
+    group: 'transformers',
     available: true,
   },
   {
     id: 'ex3.2',
-    title: 'Exp 3.2: Open-circuit & short-circuit test',
-    subtitle: 'Determine equivalent circuit parameters and losses',
+    number: '3.2',
+    title: 'Open-circuit and short-circuit tests of single-phase transformer',
+    group: 'transformers',
+    available: false,
+  },
+  {
+    id: 'ex3.3',
+    number: '3.3',
+    title: "Sumpner's test of single-phase transformer",
+    group: 'transformers',
+    available: false,
+  },
+  {
+    id: 'ex3.4',
+    number: '3.4',
+    title: 'Parallel operation of single-phase transformers',
+    group: 'transformers',
+    available: false,
+  },
+  {
+    id: 'ex3.5',
+    number: '3.5',
+    title: 'Study of various three-phase transformer connections',
+    group: 'transformers',
+    available: false,
+  },
+  {
+    id: 'ex3.6',
+    number: '3.6',
+    title: 'Phase-transformation',
+    group: 'transformers',
     available: false,
   },
   {
     id: 'ex4.1',
-    title: 'Exp 4.1: Three-phase induction motor load test',
-    subtitle: 'Two-wattmeter method and slip-torque characteristics',
+    number: '4.1',
+    title: 'Load test of three-phase induction motor',
+    group: 'induction',
+    available: false,
+  },
+  {
+    id: 'ex4.2',
+    number: '4.2',
+    title: 'No-load and blocked-rotor tests of three-phase induction motor',
+    group: 'induction',
+    available: false,
+  },
+  {
+    id: 'ex4.5',
+    number: '4.5',
+    title:
+      'No-load and blocked-rotor test of single-phase capacitor-start induction motor',
+    group: 'induction',
     available: false,
   },
 ];
@@ -48,10 +94,8 @@ export function netlistToWirePairs(netlist: Net[]): WireEndpointPair[] {
   const pairs: WireEndpointPair[] = [];
   for (const net of netlist) {
     if (net.length < 2) continue;
-    // Skip variac internal link IN_N <-> OUT_N if consecutive so we don't draw a redundant wire on top of the variac
     const filtered = [...net];
     if (filtered.includes('va.IN_N') && filtered.includes('va.OUT_N')) {
-      // Connect sup.N -> va.IN_N, and connect remaining neutral terminals cleanly from va.OUT_N
       const others = filtered.filter(
         (t) => t !== 'sup.N' && t !== 'va.IN_N' && t !== 'va.OUT_N',
       );
