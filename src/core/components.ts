@@ -70,6 +70,50 @@ export const COMPONENT_DEFS: Record<ComponentType, ComponentTypeDef> = {
       { name: 'B', label: 'Rheostat B', localPos: [0.26, 0.16, 0.42] },
     ],
   },
+  acSupply3ph: {
+    type: 'acSupply3ph',
+    terminals: [
+      { name: 'A', label: 'Phase R (A)', localPos: [-0.28, 0.2, 0.45] },
+      { name: 'B', label: 'Phase Y (B)', localPos: [-0.08, 0.2, 0.45] },
+      { name: 'C', label: 'Phase B (C)', localPos: [0.12, 0.2, 0.45] },
+      { name: 'N', label: 'Neutral (N)', localPos: [0.34, 0.2, 0.45] },
+    ],
+  },
+  variac3ph: {
+    type: 'variac3ph',
+    terminals: [
+      { name: 'IN_A', label: '3φ In A', localPos: [-0.36, 0.34, 0.56] },
+      { name: 'IN_B', label: '3φ In B', localPos: [-0.12, 0.34, 0.56] },
+      { name: 'IN_C', label: '3φ In C', localPos: [0.12, 0.34, 0.56] },
+      { name: 'OUT_A', label: '3φ Out A', localPos: [-0.36, -0.02, 0.56] },
+      { name: 'OUT_B', label: '3φ Out B', localPos: [-0.12, -0.02, 0.56] },
+      { name: 'OUT_C', label: '3φ Out C', localPos: [0.12, -0.02, 0.56] },
+    ],
+  },
+  transformer3ph: {
+    type: 'transformer3ph',
+    terminals: [
+      { name: 'A', label: 'Primary A', localPos: [-0.42, 0.38, 0.58] },
+      { name: 'B', label: 'Primary B', localPos: [0, 0.38, 0.58] },
+      { name: 'C', label: 'Primary C', localPos: [0.42, 0.38, 0.58] },
+      { name: 'T1', label: 'Secondary T1', localPos: [-0.75, 0.08, 0.58] },
+      { name: 'T2', label: 'Secondary T2', localPos: [-0.45, 0.08, 0.58] },
+      { name: 'T3', label: 'Secondary T3', localPos: [-0.15, 0.08, 0.58] },
+      { name: 'T4', label: 'Secondary T4', localPos: [0.15, 0.08, 0.58] },
+      { name: 'T5', label: 'Secondary T5', localPos: [0.45, 0.08, 0.58] },
+      { name: 'T6', label: 'Secondary T6', localPos: [0.75, 0.08, 0.58] },
+      { name: 'T7', label: 'Secondary T7', localPos: [-0.75, -0.22, 0.58] },
+      { name: 'T8', label: 'Secondary T8', localPos: [-0.45, -0.22, 0.58] },
+      { name: 'T9', label: 'Secondary T9', localPos: [-0.15, -0.22, 0.58] },
+      { name: 'T10', label: 'Secondary T10', localPos: [0.15, -0.22, 0.58] },
+      { name: 'T11', label: 'Secondary T11', localPos: [0.45, -0.22, 0.58] },
+      { name: 'T12', label: 'Secondary T12', localPos: [0.75, -0.22, 0.58] },
+    ],
+  },
+  probeVoltmeter: {
+    type: 'probeVoltmeter',
+    terminals: [],
+  },
 };
 
 export function getComponentDef(type: ComponentType): ComponentTypeDef {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getStage } from '../core/circuit/stages';
+import { isSupplySwitchOn } from '../core/physics/evaluate';
 import {
   evaluateColumnValue,
   evaluateRowRules,
@@ -70,7 +71,7 @@ export function ObservationsPanel({
   const isLearnMode = mode === 'learn';
   const hasMultipleStages = experiment.stages.length > 1;
   const stage = getStage(experiment, currentStageIndex);
-  const supplyOn = Boolean(controls['sup.switch']);
+  const supplyOn = isSupplySwitchOn(controls);
   const canAddRow =
     supplyOn && energised && observationRows.length < MAX_OBSERVATION_ROWS;
 
@@ -371,6 +372,66 @@ export function ObservationsPanel({
               params={stage.physicsParams}
             />
           ))}
+
+          {experiment.phasorReport && (
+            <div
+              className="space-y-2 rounded-xl p-2.5"
+              style={{ border: '1px solid var(--vml-border)' }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">Phasor Vector Diagrams</span>
+                <span
+                  className="text-[10px]"
+                  style={{ color: 'var(--vml-text-muted)' }}
+                >
+                  Reference (not graded)
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                <div
+                  className="rounded-lg p-1.5"
+                  style={{ backgroundColor: 'var(--vml-panel-hover)' }}
+                >
+                  <svg viewBox="0 0 100 100" className="mx-auto h-20 w-20">
+                    <line x1="50" y1="50" x2="88" y2="50" stroke="#ef4444" strokeWidth="2.2" />
+                    <line x1="50" y1="50" x2="31" y2="83" stroke="#eab308" strokeWidth="2.2" />
+                    <line x1="50" y1="50" x2="31" y2="17" stroke="#3b82f6" strokeWidth="2.2" />
+                    <polygon points="88,50 31,83 31,17" fill="none" stroke="#94a3b8" strokeDasharray="3 2" strokeWidth="1" />
+                    <text x="50" y="45" fill="#94a3b8" fontSize="8" textAnchor="middle">N</text>
+                  </svg>
+                  <div className="font-semibold">Star (Y)</div>
+                  <div style={{ color: 'var(--vml-text-muted)' }}>VL = √3·Vp</div>
+                </div>
+                <div
+                  className="rounded-lg p-1.5"
+                  style={{ backgroundColor: 'var(--vml-panel-hover)' }}
+                >
+                  <svg viewBox="0 0 100 100" className="mx-auto h-20 w-20">
+                    <line x1="20" y1="78" x2="80" y2="78" stroke="#ef4444" strokeWidth="2.2" />
+                    <line x1="80" y1="78" x2="50" y2="26" stroke="#eab308" strokeWidth="2.2" />
+                    <line x1="50" y1="26" x2="20" y2="78" stroke="#3b82f6" strokeWidth="2.2" />
+                  </svg>
+                  <div className="font-semibold">Delta (Δ)</div>
+                  <div style={{ color: 'var(--vml-text-muted)' }}>VL = Vp</div>
+                </div>
+                <div
+                  className="rounded-lg p-1.5"
+                  style={{ backgroundColor: 'var(--vml-panel-hover)' }}
+                >
+                  <svg viewBox="0 0 100 100" className="mx-auto h-20 w-20">
+                    <polyline points="50,50 70,50 82,30" fill="none" stroke="#ef4444" strokeWidth="2" />
+                    <polyline points="50,50 40,67 57,82" fill="none" stroke="#eab308" strokeWidth="2" />
+                    <polyline points="50,50 40,33 20,40" fill="none" stroke="#3b82f6" strokeWidth="2" />
+                    <line x1="50" y1="50" x2="82" y2="30" stroke="#94a3b8" strokeDasharray="2 2" strokeWidth="1" />
+                    <line x1="50" y1="50" x2="57" y2="82" stroke="#94a3b8" strokeDasharray="2 2" strokeWidth="1" />
+                    <line x1="50" y1="50" x2="20" y2="40" stroke="#94a3b8" strokeDasharray="2 2" strokeWidth="1" />
+                  </svg>
+                  <div className="font-semibold">Zig-Zag</div>
+                  <div style={{ color: 'var(--vml-text-muted)' }}>VL = 1.5·Vp</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Schema-driven student report answers */}
           {experiment.answers.length > 0 && (

@@ -12,10 +12,14 @@ export type WireEndpointPair = [TerminalId, TerminalId];
 
 export type ComponentType =
   | 'acSupply'
+  | 'acSupply3ph'
   | 'variac1ph'
+  | 'variac3ph'
   | 'wattmeter'
   | 'transformer1ph'
+  | 'transformer3ph'
   | 'voltmeter'
+  | 'probeVoltmeter'
   | 'ammeter'
   | 'lampLoad'
   | 'rheostat';
@@ -343,6 +347,8 @@ export interface StageDef {
   hints?: string[];
   solutionNote?: string;
   carryOver?: StageCarryOver;
+  probeEnabled?: boolean;
+  identificationMode?: 'winding-pairs' | 'phase-groups';
 }
 
 export interface ExperimentDef {
@@ -355,6 +361,7 @@ export interface ExperimentDef {
   charts?: ChartSpec[];
   hints: string[];
   solutionNote: string;
+  phasorReport?: boolean;
 }
 
 export interface ExperimentSummary {
@@ -544,6 +551,29 @@ export interface NetGraphLike {
   areConnected: (a: TerminalId, b: TerminalId) => boolean;
 }
 
+export interface StageValidationInput {
+  stage: StageDef;
+  stageIndex: number;
+  wires: { a: TerminalId; b: TerminalId }[];
+  nets: Net[];
+  netGraph: NetGraphLike;
+  faults: FaultPattern[];
+  controls: ControlValues;
+  seed?: number;
+  identification?: {
+    pairs?: [TerminalId, TerminalId][];
+    phaseGroups?: string[][];
+  };
+}
+
+export interface LearnStepResolution {
+  connectTerminals?: [TerminalId, TerminalId][];
+  disconnectTerminals?: [TerminalId, TerminalId][];
+  probeTerminals?: [TerminalId, TerminalId];
+  identifiedPairs?: [TerminalId, TerminalId][];
+  identifiedPhases?: string[][];
+}
+
 export interface PhysicsModel<
   TConn extends BaseConnectionState = BaseConnectionState,
 > {
@@ -556,6 +586,8 @@ export interface PhysicsModel<
     seed?: number,
   ) => TConn;
   solve: (input: PhysicsSolveInput<TConn>) => PhysicsSolveOutput;
+  validateStage?: (input: StageValidationInput) => ValidationResult | null;
+  resolveLearnStep?: (stepId: string, seed: number) => LearnStepResolution | null;
 }
 
 export interface RunAnswers {

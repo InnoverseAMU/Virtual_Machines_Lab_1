@@ -1,6 +1,7 @@
 import { matchFaultPatterns } from './faults';
 import { buildNets, type WireInput } from './nets';
 import { getStage, getStageComponents, getStageHints } from './stages';
+import { getPhysicsModel } from '../physics/registry';
 import type {
   ControlValues,
   ExperimentDef,
@@ -129,11 +130,45 @@ export function validateWiring(
   wires: WireInput[],
   stageIndex = 0,
   controls: ControlValues = {},
+  options: {
+    seed?: number;
+    identification?: {
+      pairs?: [TerminalId, TerminalId][];
+      phaseGroups?: string[][];
+    };
+  } = {},
 ): ValidationResult {
   const stage = getStage(experiment, stageIndex);
   const components = getStageComponents(experiment, stage);
   const graph = buildNets(components, wires, controls);
   const faults = matchFaultPatterns(stage.faultPatterns, graph);
+
+  let model: ReturnType<typeof getPhysicsModel> | null = null;
+  try {
+    model = getPhysicsModel(stage.physicsModel);
+  } catch {
+    model = null;
+  }
+
+  if (model?.validateStage) {
+    const custom = model.validateStage({
+      stage,
+      stageIndex,
+      wires: wires.map((w) => (Array.isArray(w) ? { a: w[0], b: w[1] } : w)),
+      nets: graph.nets,
+      netGraph: graph,
+      faults,
+      controls,
+      seed: options.seed,
+      identification: options.identification,
+    });
+    if (custom) {
+      return {
+        ...custom,
+        hintLevelAvailable: getStageHints(experiment, stage).length,
+      };
+    }
+  }
 
   let bestEval: NetlistEvaluation | null = null;
   for (let i = 0; i < stage.acceptedNetlists.length; i++) {

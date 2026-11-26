@@ -1,4 +1,5 @@
-import { findMeterReading } from '../core/physics/evaluate';
+import { findMeterReading, isSupplySwitchOn } from '../core/physics/evaluate';
+import { resolveScrambledTerminalLabels } from '../core/phasor/ex3_5Scramble';
 import type {
   BaseConnectionState,
   ComponentInstance,
@@ -6,12 +7,17 @@ import type {
   PhysicsSolveOutput,
 } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
+import { useSessionStore } from '../stores/sessionStore';
 import { AcSupply } from './AcSupply';
+import { AcSupply3ph } from './AcSupply3ph';
 import { AnalogMeter } from './AnalogMeter';
 import { LampBank } from './LampBank';
+import { ProbeVoltmeter } from './ProbeVoltmeter';
 import { Rheostat } from './Rheostat';
 import { Transformer } from './Transformer';
+import { Transformer3ph } from './Transformer3ph';
 import { Variac } from './Variac';
+import { Variac3ph } from './Variac3ph';
 import { Wattmeter } from './Wattmeter';
 
 interface ComponentRendererProps {
@@ -32,6 +38,9 @@ export function ComponentRenderer({
   const values = useControlsStore((s) => s.values);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
   const lampStates = useControlsStore((s) => s.lampStates);
+  const sessionSeed = useSessionStore((s) => s.sessionSeed);
+  const identifiedPairs = useSessionStore((s) => s.identifiedPairs);
+  const identifiedPhases = useSessionStore((s) => s.identifiedPhases);
 
   switch (instance.type) {
     case 'acSupply': {
@@ -42,6 +51,22 @@ export function ComponentRenderer({
       const supplyOn = Boolean(values[swId]);
       return (
         <AcSupply
+          instance={instance}
+          controlId={swId}
+          supplyOn={supplyOn}
+          mcbTripped={mcbTripped}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'acSupply3ph': {
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const swId = swDef?.id ?? 'sup3.switch';
+      const supplyOn = Boolean(values[swId]);
+      return (
+        <AcSupply3ph
           instance={instance}
           controlId={swId}
           supplyOn={supplyOn}
@@ -63,6 +88,30 @@ export function ComponentRenderer({
       const variacV = Number(values[controlId] ?? 0);
       return (
         <Variac
+          instance={instance}
+          controlId={controlId}
+          variacV={variacV}
+          minV={minV}
+          maxV={maxV}
+          stepV={stepV}
+          fineStepV={fineStepV}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'variac3ph': {
+      const knobDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const controlId = knobDef?.id ?? `${instance.id}.knob`;
+      const minV = knobDef?.kind === 'knob' ? knobDef.min : 0;
+      const maxV = knobDef?.kind === 'knob' ? knobDef.max : 270;
+      const stepV = knobDef?.kind === 'knob' ? knobDef.step : 1;
+      const fineStepV =
+        knobDef?.kind === 'knob' ? (knobDef.fineStep ?? 0.1) : 0.1;
+      const variacV = Number(values[controlId] ?? 0);
+      return (
+        <Variac3ph
           instance={instance}
           controlId={controlId}
           variacV={variacV}
@@ -136,6 +185,22 @@ export function ComponentRenderer({
     }
     case 'transformer1ph':
       return <Transformer instance={instance} />;
+    case 'transformer3ph': {
+      const labelMap = resolveScrambledTerminalLabels(
+        sessionSeed,
+        identifiedPairs,
+        identifiedPhases.length === 3,
+      );
+      return <Transformer3ph instance={instance} terminalLabelMap={labelMap} />;
+    }
+    case 'probeVoltmeter':
+      return (
+        <ProbeVoltmeter
+          instance={instance}
+          reading={findMeterReading(labOutput, instance.id)}
+          controlsLocked={controlsLocked}
+        />
+      );
     case 'voltmeter':
     case 'ammeter': {
       const rangeDef = controlsDef.find(
@@ -175,7 +240,7 @@ export function ComponentRenderer({
         (c) => c.componentId === instance.id && c.kind === 'switch',
       );
       const swSupply =
-        Boolean(values['sup.switch']) && (swDef ? Boolean(values[swDef.id]) : true);
+        isSupplySwitchOn(values) && (swDef ? Boolean(values[swDef.id]) : true);
       return (
         <LampBank
           instance={instance}
