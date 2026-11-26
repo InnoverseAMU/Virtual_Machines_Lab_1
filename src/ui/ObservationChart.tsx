@@ -4,6 +4,7 @@ import type {
   ColumnDef,
   ObservationRow,
 } from '../core/types';
+import { useSessionStore } from '../stores/sessionStore';
 
 interface ObservationChartProps {
   spec: ChartSpec;
@@ -62,9 +63,31 @@ export function ObservationChart({
   rows,
   params,
 }: ObservationChartProps) {
+  const chartInputs = useSessionStore((s) => s.chartInputs);
+  const setChartInput = useSessionStore((s) => s.setChartInput);
   const xCol = columns.find((c) => c.id === spec.xColumn);
 
+  const computedSeries = spec.computeSeries
+    ? (() => {
+        const numericInputs: Record<string, number> = {};
+        for (const inp of spec.inputs ?? []) {
+          const parsed = Number.parseFloat(chartInputs[inp.id] ?? '');
+          if (Number.isFinite(parsed)) numericInputs[inp.id] = parsed;
+        }
+        return spec.computeSeries(numericInputs, params);
+      })()
+    : null;
+
   const seriesData = spec.series.map((s, sIdx) => {
+    if (computedSeries) {
+      const rawPts = computedSeries[sIdx] ?? [];
+      return {
+        ...s,
+        color: s.color ?? SERIES_PALETTE[sIdx % SERIES_PALETTE.length],
+        pts: rawPts.map((p, idx) => ({ sno: idx + 1, x: p.x, y: p.y })),
+      };
+    }
+
     const yCol = columns.find((c) => c.id === s.yColumn);
     const pts = rows
       .map((r) => {
@@ -141,7 +164,8 @@ export function ObservationChart({
     ((Math.min(safeYMax, Math.max(yMin, v)) - yMin) / (safeYMax - yMin)) * plotH;
 
   const yTicks = [yMin, (yMin + safeYMax) / 2, safeYMax];
-  const xTicks = [xMin, Math.round((xMin + xMax * 0.42) / 10) * 10, Math.round((xMax * 0.83) / 10) * 10];
+  const stepX = (xMax - xMin) / 4;
+  const xTicks = [xMin, xMin + stepX * 2, xMax];
   const hasRefX = refXs.length > 0 && spec.xMax === 2400;
   const displayXTicks = hasRefX ? [0, 1000, 2000] : xTicks;
 
@@ -163,6 +187,37 @@ export function ObservationChart({
           </span>
         )}
       </div>
+
+      {spec.inputs && spec.inputs.length > 0 && (
+        <div className="mb-2 grid grid-cols-2 gap-1.5">
+          {spec.inputs.map((inp) => (
+            <div key={inp.id} className="space-y-0.5">
+              <label
+                htmlFor={`chart-inp-${inp.id}`}
+                className="block truncate text-[10px]"
+                style={{ color: 'var(--vml-text-muted)' }}
+              >
+                {inp.label}
+                {inp.unit ? ` (${inp.unit})` : ''}
+              </label>
+              <input
+                id={`chart-inp-${inp.id}`}
+                type="number"
+                step={inp.step ?? '0.1'}
+                placeholder={inp.placeholder ?? ''}
+                value={chartInputs[inp.id] ?? ''}
+                onChange={(e) => setChartInput(inp.id, e.target.value)}
+                className="w-full rounded-md px-2 py-1 font-mono text-[11px]"
+                style={{
+                  backgroundColor: 'var(--vml-panel)',
+                  border: '1px solid var(--vml-border)',
+                  color: 'var(--vml-text)',
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       {seriesData.length > 1 && (
         <div className="mb-1 flex flex-wrap gap-2 text-[10px]">
@@ -233,7 +288,7 @@ export function ObservationChart({
                 fontSize="8.5"
                 fill="var(--vml-text-muted)"
               >
-                {val}
+                {Number.isInteger(val) ? val : val.toFixed(1)}
               </text>
             </g>
           );

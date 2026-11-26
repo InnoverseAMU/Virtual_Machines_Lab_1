@@ -65,15 +65,18 @@ export function evaluateLearnStepCondition(
   if (cond.kind === 'v1-target') {
     const vOk = Math.abs(vPrimary - cond.targetV) <= cond.toleranceV;
     const met = supplyOn && vOk;
+    const unit = cond.unit ?? 'V';
+    const label = cond.targetLabel ?? (meterId === 'vp' ? 'V primary' : meterId);
+    const dec = unit === 'A' ? 2 : 1;
     return {
       hasCondition: true,
       met,
       canAcknowledge: false,
       hint: !supplyOn
-        ? `Switch the 230 V supply ON and raise the autotransformer knob to ${cond.targetV} V.`
+        ? `Switch the 230 V supply ON and adjust the autotransformer knob until ${label} reads ${cond.targetV} ${unit}.`
         : !vOk
-          ? `Adjust the autotransformer knob until V primary reads ${cond.targetV} ± ${cond.toleranceV} V (currently ${vPrimary.toFixed(1)} V).`
-          : `V primary is within ${cond.targetV} ± ${cond.toleranceV} V.`,
+          ? `Adjust the autotransformer knob until ${label} reads ${cond.targetV} ± ${cond.toleranceV} ${unit} (currently ${vPrimary.toFixed(dec)} ${unit}).`
+          : `${label} is within ${cond.targetV} ± ${cond.toleranceV} ${unit}.`,
     };
   }
 
@@ -171,11 +174,12 @@ export function findVariacForTargetV1(
         ...base,
         'sup.switch': true,
         [knobId]: variacV,
-        [loadId]: lamps,
+        ...(loadId in base ? { [loadId]: lamps } : {}),
       },
       gains,
       { stageIndex, seed: options.seed },
     );
+    if (res.output.mcbTripped) return Infinity;
     return findMeterReading(res.output, meterId)?.shownValue ?? 0;
   };
 

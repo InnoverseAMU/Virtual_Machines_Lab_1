@@ -37,7 +37,11 @@ export function enterLabMode(experimentId: string, targetMode: LabMode): void {
   const session = useSessionStore.getState();
 
   wiring.clearAllWiresScripted();
-  session.resetLabSession();
+  if (session.experimentId !== experimentId) {
+    session.selectExperiment(experimentId);
+  } else {
+    session.resetLabSession();
+  }
   session.setSessionSeed(seed);
   controls.initFromControls(stage.controls, seed, meterIds);
   session.setMode(targetMode);

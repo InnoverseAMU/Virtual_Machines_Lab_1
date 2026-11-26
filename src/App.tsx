@@ -67,6 +67,7 @@ export function App() {
   const goToScreen = useSessionStore((s) => s.goToScreen);
   const setCurrentStageIndex = useSessionStore((s) => s.setCurrentStageIndex);
   const switchObserveStage = useSessionStore((s) => s.switchObserveStage);
+  const continueToNextStage = useSessionStore((s) => s.continueToNextStage);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar);
@@ -268,6 +269,7 @@ export function App() {
     const loadId = 'loadControlId' in cond ? (cond.loadControlId ?? 'ld.lamps') : 'ld.lamps';
     const meterId = cond.meterId ?? 'vp';
     const controlId = 'controlId' in cond ? (cond.controlId ?? 'va.knob') : 'va.knob';
+    const hasLoadCtrl = currentStage.controls.some((c) => c.id === loadId);
     const targetLamps =
       cond.kind === 'loaded-v1-target'
         ? Math.max(Number(useControlsStore.getState().values[loadId] ?? 0), cond.minLamps)
@@ -288,7 +290,9 @@ export function App() {
       },
     );
 
-    setControlValue(loadId, targetLamps);
+    if (hasLoadCtrl) {
+      setControlValue(loadId, targetLamps);
+    }
     setControlValue(controlId, targetKnob);
     setControlValue('sup.switch', true);
     if (cond.kind === 'no-load-ack') {
@@ -558,6 +562,11 @@ export function App() {
   const learnControlsLocked = isLearn && learnStepIndex < firstConditionIdx;
   const hasMultipleStages = experiment.stages.length > 1;
   const wiredStageIds = new Set(completedStages[experiment.id] ?? []);
+  const canAdvanceStage =
+    isSelf &&
+    hasMultipleStages &&
+    currentStageIndex < experiment.stages.length - 1 &&
+    wiredStageIds.has(currentStage.id);
 
   return (
     <div className="fixed inset-0 flex overflow-x-clip overflow-y-hidden select-none">
@@ -614,6 +623,20 @@ export function App() {
                     }}
                   >
                     Last result
+                  </button>
+                )}
+
+                {canAdvanceStage && (
+                  <button
+                    type="button"
+                    onClick={continueToNextStage}
+                    className="h-8 rounded-full px-2.5 text-xs font-bold shadow-lg transition"
+                    style={{
+                      backgroundColor: '#16a34a',
+                      color: '#ffffff',
+                    }}
+                  >
+                    Next stage →
                   </button>
                 )}
 

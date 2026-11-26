@@ -9,6 +9,8 @@ interface TransformerProps {
 
 export function Transformer({ instance }: TransformerProps) {
   const def = getComponentDef(instance.type);
+  const pPlate = String(instance.params.pPlate ?? 'PRIMARY 230 V');
+  const sPlate = String(instance.params.sPlate ?? 'SECONDARY 115 V');
 
   return (
     <group position={instance.position}>
@@ -48,7 +50,7 @@ export function Transformer({ instance }: TransformerProps) {
 
       {/* Group plates on the plinth above P1/P2 and S1/S2 */}
       <LabelPlate
-        text="PRIMARY 230 V"
+        text={pPlate}
         width={0.48}
         height={0.13}
         fontSize={32}
@@ -56,7 +58,7 @@ export function Transformer({ instance }: TransformerProps) {
         rotation={[-Math.PI / 2, 0, 0]}
       />
       <LabelPlate
-        text="SECONDARY 115 V"
+        text={sPlate}
         width={0.48}
         height={0.13}
         fontSize={30}
