@@ -103,6 +103,8 @@ const LearnStepConditionSchema = z.discriminatedUnion('kind', [
     toleranceV: z.number().positive(),
     meterId: z.string().min(1).optional(),
     controlId: z.string().min(1).optional(),
+    unit: z.string().min(1).optional(),
+    targetLabel: z.string().min(1).optional(),
   }),
   z.object({
     kind: z.literal('no-load-ack'),
@@ -178,6 +180,14 @@ const PrerequisiteDefSchema = z.object({
   failHint: z.string().min(1),
 });
 
+const ChartInputDefSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  unit: z.string().optional(),
+  placeholder: z.string().optional(),
+  step: z.string().optional(),
+});
+
 const ChartSpecSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -209,6 +219,8 @@ const ChartSpecSchema = z.object({
     )
     .optional(),
   emptyText: z.string().optional(),
+  inputs: z.array(ChartInputDefSchema).optional(),
+  computeSeries: z.function().optional(),
 });
 
 const AnswerToleranceSchema = z.union([
@@ -240,6 +252,9 @@ const StageDefSchema = z.object({
   componentIds: z.array(z.string().min(1)).min(1),
   componentPositions: z
     .record(z.string(), z.tuple([z.number(), z.number(), z.number()]))
+    .optional(),
+  componentParams: z
+    .record(z.string(), z.record(z.string(), ComponentParamValueSchema))
     .optional(),
   cameraPresets: z.array(CameraPresetDefSchema).min(1).optional(),
   acceptedNetlists: z

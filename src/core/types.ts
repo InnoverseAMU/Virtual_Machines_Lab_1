@@ -126,6 +126,8 @@ export type LearnStepCondition =
       toleranceV: number;
       meterId?: string;
       controlId?: string;
+      unit?: string;
+      targetLabel?: string;
     }
   | {
       kind: 'no-load-ack';
@@ -246,6 +248,14 @@ export interface ChartReferenceLine {
   color?: string;
 }
 
+export interface ChartInputDef {
+  id: string;
+  label: string;
+  unit?: string;
+  placeholder?: string;
+  step?: string;
+}
+
 export interface ChartSpec {
   id: string;
   title: string;
@@ -260,6 +270,11 @@ export interface ChartSpec {
   yMax?: number;
   referenceLines?: ChartReferenceLine[];
   emptyText?: string;
+  inputs?: ChartInputDef[];
+  computeSeries?: (
+    inputValues: Record<string, number>,
+    params: Record<string, number>,
+  ) => { x: number; y: number }[][];
 }
 
 export type AnswerTolerance =
@@ -304,6 +319,7 @@ export interface StageDef {
   summary: string;
   componentIds: string[];
   componentPositions?: Record<string, [number, number, number]>;
+  componentParams?: Record<string, Record<string, ComponentParamValue>>;
   cameraPresets?: CameraPresetDef[];
   acceptedNetlists: Net[][];
   netLabels?: string[];

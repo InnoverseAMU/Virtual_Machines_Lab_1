@@ -184,6 +184,7 @@ interface SessionState {
   observationRowsByStage: Record<string, ObservationRow[]>;
   observationRows: ObservationRow[];
   runAnswerInputs: Record<string, string>;
+  chartInputs: Record<string, string>;
   runRegulationInput: string;
   runMaxEffLoadInput: string;
   runCheckResult: RunCheckResult | null;
@@ -242,6 +243,7 @@ interface SessionState {
   deleteObservationRow: (id: string) => void;
   clearObservationRows: () => void;
   setRunAnswerInput: (answerId: string, val: string) => void;
+  setChartInput: (inputId: string, val: string) => void;
   setRunRegulationInput: (val: string) => void;
   setRunMaxEffLoadInput: (val: string) => void;
   submitRunAnswers: () => RunCheckResult;
@@ -306,6 +308,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   observationRowsByStage: {},
   observationRows: [],
   runAnswerInputs: {},
+  chartInputs: {},
   runRegulationInput: '',
   runMaxEffLoadInput: '',
   runCheckResult: null,
@@ -349,6 +352,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       observationRowsByStage: {},
       observationRows: [],
       runAnswerInputs: {},
+      chartInputs: {},
       runRegulationInput: '',
       runMaxEffLoadInput: '',
       runCheckResult: null,
@@ -676,6 +680,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       ...(answerId === 'maxEffLoadPct' ? { runMaxEffLoadInput: val } : {}),
     })),
 
+  setChartInput: (inputId, val) =>
+    set((state) => ({
+      chartInputs: { ...state.chartInputs, [inputId]: val },
+    })),
+
   setRunRegulationInput: (runRegulationInput) =>
     set((state) => ({
       runRegulationInput,
@@ -851,6 +860,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       observationRowsByStage: {},
       observationRows: [],
       runAnswerInputs: {},
+      chartInputs: {},
       runRegulationInput: '',
       runMaxEffLoadInput: '',
       runCheckResult: null,

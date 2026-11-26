@@ -71,9 +71,16 @@ export function getStageComponents(
     const comp = byId.get(cid);
     if (!comp) continue;
     const overridePos = stage.componentPositions?.[cid];
-    result.push(
-      overridePos ? { ...comp, position: overridePos } : comp,
-    );
+    const overrideParams = stage.componentParams?.[cid];
+    if (overridePos || overrideParams) {
+      result.push({
+        ...comp,
+        ...(overridePos ? { position: overridePos } : {}),
+        ...(overrideParams ? { params: { ...comp.params, ...overrideParams } } : {}),
+      });
+    } else {
+      result.push(comp);
+    }
   }
   return result;
 }
