@@ -1,16 +1,21 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
 import { findVariacForTargetV1 } from '../core/circuit/learn';
+import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
+import { findStageTerminalNetInfo, getStage } from '../core/circuit/stages';
 import { validateWiring } from '../core/circuit/validate';
 import { ex3_1, NET_A, NET_B } from '../core/experiments/ex3_1';
 import { evaluateExperimentPhysics } from '../core/physics/evaluate';
 import { extractTransformerParams } from '../core/physics/models/transformerLoad';
 import { computeRunTruth } from '../core/physics/report';
+import type { MeterGains } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { enterLabMode } from '../stores/modeActions';
-import { parseStoredProgress, useSessionStore } from '../stores/sessionStore';
+import {
+  OBSERVE_FIXED_SEED,
+  parseStoredProgress,
+  useSessionStore,
+} from '../stores/sessionStore';
 import { useWiringStore } from '../stores/wiringStore';
-import type { MeterGains } from '../core/types';
 
 const ZERO_GAINS: MeterGains = { vp: 0, vs: 0, am: 0, wm: 0 };
 
@@ -22,6 +27,7 @@ describe('Observe mode (pre-wired bench)', () => {
       experimentId: 'ex3.1',
       mode: 'self',
       completedExperiments: [],
+      completedStages: {},
       runCompleted: {},
       runPractised: {},
     });
@@ -51,17 +57,18 @@ describe('Observe mode (pre-wired bench)', () => {
   });
 
   it('provides a netPurposes entry for every category used in netCategoryKeys', () => {
-    expect(ex3_1.netPurposes).toBeDefined();
-    const keys = ex3_1.netCategoryKeys ?? [];
-    expect(keys.length).toBe(ex3_1.acceptedNetlists[0].length);
+    const stage = getStage(ex3_1, 0);
+    expect(stage.netPurposes).toBeDefined();
+    const keys = stage.netCategoryKeys ?? [];
+    expect(keys.length).toBe(stage.acceptedNetlists[0].length);
     for (const key of keys) {
-      const text = ex3_1.netPurposes?.[key];
+      const text = stage.netPurposes?.[key];
       expect(typeof text).toBe('string');
       expect((text ?? '').trim().length).toBeGreaterThan(0);
     }
   });
 
-  it('defaults runPractised to {} when missing in legacy stored progress', () => {
+  it('defaults runPractised to {} and migrates completedStages when missing in legacy stored progress', () => {
     const legacy = JSON.stringify({
       attempts: { 'ex3.1': 2 },
       completedExperiments: ['ex3.1'],
@@ -73,6 +80,7 @@ describe('Observe mode (pre-wired bench)', () => {
     expect(parsed.runPractised).toEqual({});
     expect(parsed.attempts['ex3.1']).toBe(2);
     expect(parsed.completedExperiments).toEqual(['ex3.1']);
+    expect(parsed.completedStages['ex3.1']).toEqual(['load-test']);
 
     const withPractised = parseStoredProgress(
       JSON.stringify({ runPractised: { 'ex3.1': true } }),
@@ -80,16 +88,16 @@ describe('Observe mode (pre-wired bench)', () => {
     expect(withPractised.runPractised).toEqual({ 'ex3.1': true });
   });
 
-  it('loads 14 locked wires in Observe mode and clears them when entering Self or Learn mode', () => {
+  it('loads 14 locked wires in Observe mode with fixed seed and clears them when entering Self or Learn mode', () => {
     enterLabMode('ex3.1', 'observe');
 
     expect(useSessionStore.getState().mode).toBe('observe');
     expect(useSessionStore.getState().screen).toBe('lab');
+    expect(useSessionStore.getState().sessionSeed).toBe(OBSERVE_FIXED_SEED);
     const observeWires = useWiringStore.getState().wires;
     expect(observeWires).toHaveLength(14);
     expect(validateWiring(ex3_1, observeWires).correct).toBe(true);
 
-    // Manual wiring/removal is blocked and shows the locked toast
     useWiringStore.getState().clickTerminal('sup.P', false);
     expect(useWiringStore.getState().selectedTerminal).toBeNull();
     expect(useWiringStore.getState().wires).toHaveLength(14);
@@ -101,12 +109,10 @@ describe('Observe mode (pre-wired bench)', () => {
     useWiringStore.getState().removeWire(firstWireId, false);
     expect(useWiringStore.getState().wires).toHaveLength(14);
 
-    // Entering Self mode after Observe starts with an empty bench
     enterLabMode('ex3.1', 'self');
     expect(useSessionStore.getState().mode).toBe('self');
     expect(useWiringStore.getState().wires).toHaveLength(0);
 
-    // Re-enter Observe, then switch to Learn mode -> starts with 0 wires at step 0
     enterLabMode('ex3.1', 'observe');
     expect(useWiringStore.getState().wires).toHaveLength(14);
     enterLabMode('ex3.1', 'learn');
@@ -118,20 +124,14 @@ describe('Observe mode (pre-wired bench)', () => {
   it('records runPractised in Observe mode without marking completedExperiments or runCompleted', () => {
     enterLabMode('ex3.1', 'observe');
     const wires = useWiringStore.getState().wires;
+    const stage = getStage(ex3_1, 0);
 
     for (const lamps of [0, 2, 4, 6, 8, 10]) {
       const knob = findVariacForTargetV1(ex3_1, wires, 230, lamps, ZERO_GAINS);
       useControlsStore.getState().setSupplyOn(true);
       useControlsStore.getState().setVariacV(knob);
       useControlsStore.getState().setLamps(lamps);
-      const st = useControlsStore.getState();
-      const controls = {
-        supplyOn: st.supplyOn,
-        variacV: st.variacV,
-        wmVRange: st.wmVRange,
-        wmIRange: st.wmIRange,
-        lamps: st.lamps,
-      };
+      const controls = { ...useControlsStore.getState().values };
       const { output, connectionState } = evaluateExperimentPhysics(
         ex3_1,
         wires,
@@ -140,10 +140,10 @@ describe('Observe mode (pre-wired bench)', () => {
       );
       useSessionStore
         .getState()
-        .addObservationRow(output, controls, connectionState.primaryEnergised);
+        .addObservationRow(output, controls, connectionState.energised);
     }
 
-    const truth = computeRunTruth(extractTransformerParams(ex3_1.physicsParams));
+    const truth = computeRunTruth(extractTransformerParams(stage.physicsParams));
     useSessionStore.getState().setRunRegulationInput(truth.regulationPct.toFixed(2));
     useSessionStore.getState().setRunMaxEffLoadInput(truth.maxEffLoadPct.toFixed(1));
 
@@ -153,5 +153,14 @@ describe('Observe mode (pre-wired bench)', () => {
     expect(session.runPractised['ex3.1']).toBe(true);
     expect(session.runCompleted['ex3.1']).not.toBe(true);
     expect(session.completedExperiments).not.toContain('ex3.1');
+  });
+
+  it('resolves terminal net labels for Observe mode hover tooltips (including neutral and supply)', () => {
+    const stage31 = getStage(ex3_1, 0);
+    expect(findStageTerminalNetInfo(stage31, 'sup.P')).toMatchObject({
+      netIndex: 0,
+    });
+    expect(findStageTerminalNetInfo(stage31, 'sup.N')?.label).toMatch(/neutral/i);
+    expect(findStageTerminalNetInfo(stage31, 'vp.A')).toBeTruthy();
   });
 });

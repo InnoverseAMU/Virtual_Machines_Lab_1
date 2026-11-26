@@ -1,15 +1,25 @@
+import { matchFaultPatterns } from '../../circuit/faults';
+import type {
+  ConnectionState,
+  ControlValues,
+  FaultPattern,
+  MeterGains,
+  NetGraphLike,
+  PhysicsModel,
+  PhysicsSolveInput,
+  PhysicsSolveOutput,
+  RuntimeEvent,
+  TerminalId,
+  TransformerLoadControls,
+  TransformerLoadOutput,
+} from '../../types';
 import {
   DEFAULT_METER_GAINS,
   evaluateAnalogMeter,
   evaluateWattmeter,
+  toAnalogMeterReading,
+  toWattmeterMeterReading,
 } from '../meters';
-import type {
-  ConnectionState,
-  MeterGains,
-  RuntimeEvent,
-  TransformerLoadControls,
-  TransformerLoadOutput,
-} from '../../types';
 
 export interface TransformerLoadParams {
   a: number;
@@ -70,6 +80,167 @@ export function extractTransformerParams(
   };
 }
 
+function anyConnectedTo(
+  graph: NetGraphLike,
+  target: TerminalId,
+  candidates: TerminalId[],
+): boolean {
+  return candidates.some((c) => graph.areConnected(target, c));
+}
+
+function pairAcross(
+  graph: NetGraphLike,
+  t1: TerminalId,
+  t2: TerminalId,
+  sideA: TerminalId[],
+  sideB: TerminalId[],
+): boolean {
+  const fwd = anyConnectedTo(graph, t1, sideA) && anyConnectedTo(graph, t2, sideB);
+  const rev = anyConnectedTo(graph, t2, sideA) && anyConnectedTo(graph, t1, sideB);
+  return fwd || rev;
+}
+
+/**
+ * Derives the electrical ConnectionState from student nets and matched faults
+ * so the transformerLoad model behaves like a real bench for both correct and faulty wirings.
+ */
+export function deriveTransformerLoadConnectionState(
+  graph: NetGraphLike,
+  faults: FaultPattern[],
+  supplyOn: boolean,
+): ConnectionState {
+  const faultIds = faults.map((f) => f.id);
+  const shortFaults = faults.filter((f) => f.effect === 'short');
+  const shorted = shortFaults.length > 0;
+
+  const variacBypassed =
+    graph.areConnected('sup.P', 'va.OUT_P') ||
+    graph.areConnected('sup.P', 'wm.M') ||
+    graph.areConnected('sup.P', 'wm.L');
+
+  const supConnectedToVariac =
+    graph.areConnected('sup.P', 'va.IN_P') &&
+    graph.areConnected('sup.N', 'va.IN_N');
+
+  const liveSourceTerminals: TerminalId[] = variacBypassed
+    ? ['sup.P']
+    : ['va.OUT_P'];
+
+  const ccForward =
+    anyConnectedTo(graph, 'wm.M', liveSourceTerminals) &&
+    graph.areConnected('wm.L', 'tx.P1');
+
+  const ccReversed =
+    anyConnectedTo(graph, 'wm.L', liveSourceTerminals) &&
+    graph.areConnected('wm.M', 'tx.P1');
+
+  const primaryDirectToTx = anyConnectedTo(graph, 'tx.P1', liveSourceTerminals);
+  const primaryNeutralReturn = graph.areConnected('tx.P2', 'sup.N');
+
+  const voltmeterInSeriesPrimary = faultIds.includes('voltmeter-in-series-primary');
+  const voltmeterInSeriesLoad = faultIds.includes('voltmeter-in-series-load');
+
+  const primaryPathClosed =
+    (supConnectedToVariac || variacBypassed) &&
+    primaryNeutralReturn &&
+    (ccForward || ccReversed || primaryDirectToTx) &&
+    !voltmeterInSeriesPrimary;
+
+  const primaryEnergised = supplyOn && !shorted && primaryPathClosed;
+
+  const neutralSide: TerminalId[] = ['sup.N', 'va.IN_N', 'va.OUT_N', 'tx.P2'];
+  const primaryLiveSide: TerminalId[] = [
+    'va.OUT_P',
+    'wm.M',
+    'wm.L',
+    'tx.P1',
+    ...(variacBypassed ? ['sup.P'] : []),
+  ];
+
+  const pcForward =
+    anyConnectedTo(graph, 'wm.V1', primaryLiveSide) &&
+    anyConnectedTo(graph, 'wm.V2', neutralSide);
+  const pcReversed =
+    anyConnectedTo(graph, 'wm.V1', neutralSide) &&
+    anyConnectedTo(graph, 'wm.V2', primaryLiveSide);
+
+  const wmPcEnergised =
+    supplyOn &&
+    !shorted &&
+    (supConnectedToVariac || variacBypassed) &&
+    (pcForward || pcReversed);
+
+  const wmCcEnergised = primaryEnergised && (ccForward || ccReversed);
+  const wmReversed = ccReversed !== pcReversed;
+
+  const vpAcrossPrimary = pairAcross(
+    graph,
+    'vp.A',
+    'vp.B',
+    primaryLiveSide,
+    neutralSide,
+  );
+  const vpConnected =
+    supplyOn &&
+    !shorted &&
+    (supConnectedToVariac || variacBypassed) &&
+    (vpAcrossPrimary || (voltmeterInSeriesPrimary && primaryNeutralReturn));
+
+  const amForwardSide1 =
+    graph.areConnected('tx.S1', 'am.IN') && graph.areConnected('am.OUT', 'ld.A');
+  const amReverseSide1 =
+    graph.areConnected('tx.S1', 'am.OUT') && graph.areConnected('am.IN', 'ld.A');
+  const amSide2Forward =
+    graph.areConnected('tx.S2', 'am.IN') && graph.areConnected('am.OUT', 'ld.B');
+  const amSide2Reverse =
+    graph.areConnected('tx.S2', 'am.OUT') && graph.areConnected('am.IN', 'ld.B');
+
+  const ammeterInSeries =
+    ((amForwardSide1 || amReverseSide1) && graph.areConnected('tx.S2', 'ld.B')) ||
+    ((amSide2Forward || amSide2Reverse) && graph.areConnected('tx.S1', 'ld.A'));
+
+  const directLoad =
+    graph.areConnected('tx.S1', 'ld.A') && graph.areConnected('tx.S2', 'ld.B');
+
+  const loadConnected =
+    primaryEnergised &&
+    !voltmeterInSeriesLoad &&
+    (ammeterInSeries || directLoad);
+
+  const secondarySide1: TerminalId[] = ['tx.S1'];
+  const secondarySide2: TerminalId[] = ['tx.S2'];
+  const vsAcrossTx = pairAcross(
+    graph,
+    'vs.A',
+    'vs.B',
+    secondarySide1,
+    secondarySide2,
+  );
+  const vsAcrossLoad =
+    loadConnected &&
+    pairAcross(graph, 'vs.A', 'vs.B', ['ld.A', 'am.OUT'], ['ld.B']);
+  const vsConnected =
+    primaryEnergised && (vsAcrossTx || vsAcrossLoad || voltmeterInSeriesLoad);
+
+  return {
+    shorted,
+    shortFaults,
+    matchedFaultIds: faultIds,
+    energised: primaryEnergised,
+    variacBypassed,
+    primaryEnergised,
+    vpConnected,
+    vsConnected,
+    wmCcEnergised,
+    wmPcEnergised,
+    wmReversed,
+    loadConnected,
+    ammeterInSeries,
+    voltmeterInSeriesLoad,
+    voltmeterInSeriesPrimary,
+  };
+}
+
 /**
  * Solves Exp 3.1 (load test of single-phase transformer) referred to the
  * secondary side with fixed-point supply sag and ConnectionState fault effects.
@@ -80,6 +251,8 @@ export function solveTransformerLoad(
   conn: ConnectionState,
   gains: MeterGains = DEFAULT_METER_GAINS,
   options: SolveOptions = {},
+  wmPf = 1.0,
+  wmReverseSwitch = false,
 ): TransformerLoadOutput {
   const events: RuntimeEvent[] = [];
 
@@ -109,6 +282,8 @@ export function solveTransformerLoad(
           gains.wm,
           false,
           params.wmDivisions,
+          wmPf,
+          wmReverseSwitch,
         ),
       },
       events,
@@ -149,6 +324,8 @@ export function solveTransformerLoad(
           gains.wm,
           false,
           params.wmDivisions,
+          wmPf,
+          wmReverseSwitch,
         ),
       },
       events,
@@ -171,7 +348,6 @@ export function solveTransformerLoad(
   let eta = 0;
 
   if (conn.voltmeterInSeriesPrimary) {
-    // High-impedance voltmeter in series with primary blocks load current
     V1 = effectiveVset;
   } else if (!conn.primaryEnergised) {
     if (conn.vpConnected) {
@@ -230,6 +406,8 @@ export function solveTransformerLoad(
     gains.wm,
     conn.wmReversed,
     params.wmDivisions,
+    wmPf,
+    wmReverseSwitch,
   );
 
   let runFailed = false;
@@ -336,3 +514,94 @@ export function solveTransformerLoad(
     events,
   };
 }
+
+function readTransformerLoadControls(
+  controls: ControlValues,
+): { mapped: TransformerLoadControls; wmReverseSwitch: boolean } {
+  const vRangeNum = Number(controls['wm.vRange'] ?? 300);
+  const iRangeNum = Number(controls['wm.iRange'] ?? 10);
+  const wmVRange: 150 | 300 = vRangeNum === 150 ? 150 : 300;
+  const wmIRange: 2.5 | 5 | 10 =
+    iRangeNum === 2.5 ? 2.5 : iRangeNum === 5 ? 5 : 10;
+
+  return {
+    mapped: {
+      supplyOn: Boolean(controls['sup.switch']),
+      variacV: Number(controls['va.knob'] ?? 0),
+      wmVRange,
+      wmIRange,
+      lamps: Number(controls['ld.lamps'] ?? 0),
+    },
+    wmReverseSwitch: Boolean(controls['wm.reverse']),
+  };
+}
+
+/**
+ * PhysicsModel implementation registered under 'transformerLoad'.
+ */
+export const transformerLoadModel: PhysicsModel<ConnectionState> = {
+  id: 'transformerLoad',
+
+  deriveConnectionState(
+    nets: NetGraphLike,
+    controls: ControlValues,
+    _stageParams: Record<string, number>,
+    faults: FaultPattern[] = [],
+  ): ConnectionState {
+    // Callers passing NetGraph directly without pre-matched faults still get valid connection state;
+    // when evaluateExperimentPhysics runs, it passes matched stage faults.
+    const supplyOn = Boolean(controls['sup.switch']);
+    return deriveTransformerLoadConnectionState(nets, faults, supplyOn);
+  },
+
+  solve(input: PhysicsSolveInput<ConnectionState>): PhysicsSolveOutput {
+    const params = extractTransformerParams(input.params);
+    const { mapped, wmReverseSwitch } = readTransformerLoadControls(input.controls);
+    const gains: MeterGains = {
+      vp: input.gains.vp ?? 0,
+      vs: input.gains.vs ?? 0,
+      am: input.gains.am ?? 0,
+      wm: input.gains.wm ?? 0,
+    };
+
+    const wmComp = input.components?.find((c) => c.id === 'wm');
+    const wmPf = Number(wmComp?.params.pf ?? 1.0);
+    const out = solveTransformerLoad(
+      params,
+      mapped,
+      input.connectionState,
+      gains,
+      { noSag: Boolean(input.options?.noSag) },
+      wmPf,
+      wmReverseSwitch,
+    );
+
+    const labelOf = (id: string, fallback: string) =>
+      input.components?.find((c) => c.id === id)?.label ?? fallback;
+
+    return {
+      meters: [
+        toAnalogMeterReading('vp', labelOf('vp', 'V primary'), 'voltmeter', 'V', out.meters.vp, 1),
+        toAnalogMeterReading('vs', labelOf('vs', 'V secondary'), 'voltmeter', 'V', out.meters.vs, 1),
+        toAnalogMeterReading('am', labelOf('am', 'A secondary'), 'ammeter', 'A', out.meters.am, 2),
+        toWattmeterMeterReading('wm', labelOf('wm', 'Wattmeter'), out.meters.wm, 1),
+      ],
+      events: out.events,
+      mcbTripped: out.mcbTripped,
+      runFailed: out.runFailed,
+      outputs: {
+        V1: out.V1,
+        I1: out.I1,
+        V2: out.V2,
+        I2: out.I2,
+        Pout: out.Pout,
+        Pin: out.Pin,
+        Pcu: out.Pcu,
+        Pi: out.Pi,
+        eta: out.eta,
+      },
+    };
+  },
+};
+
+export { matchFaultPatterns };

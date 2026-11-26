@@ -7,24 +7,28 @@ import { Terminal } from './Terminal';
 
 interface VariacProps {
   instance: ComponentInstance;
+  controlId?: string;
   variacV: number;
   minV: number;
   maxV: number;
   stepV: number;
+  fineStepV?: number;
   controlsLocked?: boolean;
 }
 
 export function Variac({
   instance,
+  controlId = 'va.knob',
   variacV,
   minV,
   maxV,
   stepV,
+  fineStepV = 0.1,
   controlsLocked = false,
 }: VariacProps) {
   const def = getComponentDef(instance.type);
-  const setVariacV = useControlsStore((s) => s.setVariacV);
-  const stepVariacV = useControlsStore((s) => s.stepVariacV);
+  const setControlValue = useControlsStore((s) => s.setControlValue);
+  const stepControlValue = useControlsStore((s) => s.stepControlValue);
   const focusedControl = useControlsStore((s) => s.focusedControl);
   const setFocusedControl = useControlsStore((s) => s.setFocusedControl);
   const setIsDraggingControl = useControlsStore((s) => s.setIsDraggingControl);
@@ -34,7 +38,7 @@ export function Variac({
     null,
   );
 
-  const isFocused = focusedControl === 'va.knob';
+  const isFocused = focusedControl === controlId;
   const span = Math.max(1, maxV - minV);
   const knobAngle = Math.PI * 0.75 - ((variacV - minV) / span) * Math.PI * 1.5;
 
@@ -44,10 +48,14 @@ export function Variac({
       if (!drag) return;
       const dx = e.clientX - drag.x;
       const dy = drag.y - e.clientY;
-      // Support both mouse and touch drag vertically or horizontally
       const deltaPx = Math.abs(dy) >= Math.abs(dx) ? dy : dx;
-      const deltaV = Math.round((deltaPx / 200) * span);
-      setVariacV(drag.startV + deltaV, minV, maxV);
+      const rawDelta = (deltaPx / 200) * span;
+      const stepDelta = Math.round(rawDelta / stepV) * stepV;
+      const next = Math.max(minV, Math.min(maxV, drag.startV + stepDelta));
+      setControlValue(
+        controlId,
+        stepV < 1 ? Math.round(next * 10) / 10 : Math.round(next),
+      );
     };
 
     const endDrag = () => {
@@ -65,7 +73,7 @@ export function Variac({
       window.removeEventListener('pointerup', endDrag);
       window.removeEventListener('pointercancel', endDrag);
     };
-  }, [minV, maxV, span, setVariacV, setIsDraggingControl]);
+  }, [controlId, minV, maxV, span, stepV, setControlValue, setIsDraggingControl]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -77,17 +85,27 @@ export function Variac({
       ) {
         return;
       }
+      const deltaMag = e.altKey
+        ? fineStepV
+        : e.shiftKey
+          ? stepV * 10
+          : stepV;
+      const prec = e.altKey ? fineStepV : stepV;
       if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
         e.preventDefault();
-        stepVariacV(e.shiftKey ? stepV * 10 : stepV, minV, maxV);
+        stepControlValue(controlId, deltaMag, minV, maxV, prec);
       } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
         e.preventDefault();
-        stepVariacV(-(e.shiftKey ? stepV * 10 : stepV), minV, maxV);
+        stepControlValue(controlId, -deltaMag, minV, maxV, prec);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isFocused, stepV, minV, maxV, stepVariacV]);
+  }, [isFocused, controlId, stepV, fineStepV, minV, maxV, stepControlValue]);
+
+  const vDisplay = Number.isInteger(variacV) ? String(variacV) : variacV.toFixed(1);
+
+  const plateLabel = String(instance.params.plateLabel ?? 'AUTOTRANSFORMER');
 
   return (
     <group position={instance.position}>
@@ -97,7 +115,7 @@ export function Variac({
         <meshStandardMaterial color="#1e293b" roughness={0.6} metalness={0.25} />
       </mesh>
 
-      {/* Cylindrical toroidal coil housing shifted back so front plate is clear */}
+      {/* Cylindrical toroidal coil housing */}
       <mesh position={[0, 0.5, -0.14]} castShadow receiveShadow>
         <cylinderGeometry args={[0.37, 0.39, 0.48, 28]} />
         <meshStandardMaterial color="#475569" roughness={0.5} metalness={0.35} />
@@ -117,13 +135,13 @@ export function Variac({
         </mesh>
       )}
 
-      {/* Larger invisible hit cylinder for mouse/touch drag and wheel */}
+      {/* Invisible hit cylinder for mouse/touch drag and wheel */}
       <mesh
         position={[0, 0.84, -0.14]}
         onPointerDown={(e) => {
           e.stopPropagation();
           if (controlsLocked) return;
-          setFocusedControl('va.knob');
+          setFocusedControl(controlId);
           setIsDraggingControl(true);
           dragStartRef.current = {
             x: e.nativeEvent.clientX,
@@ -135,8 +153,9 @@ export function Variac({
         onWheel={(e) => {
           e.stopPropagation();
           if (controlsLocked) return;
-          setFocusedControl('va.knob');
-          stepVariacV(e.deltaY < 0 ? stepV : -stepV, minV, maxV);
+          setFocusedControl(controlId);
+          const step = e.altKey ? fineStepV : stepV;
+          stepControlValue(controlId, e.deltaY < 0 ? step : -step, minV, maxV, step);
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
@@ -168,10 +187,9 @@ export function Variac({
         </mesh>
       </group>
 
-      {/* Fully visible nameplate in front of the dome */}
       <LabelPlate
-        text="AUTOTRANSFORMER"
-        subtext={`${minV}-${maxV} V · ${variacV} V`}
+        text={plateLabel}
+        subtext={`${minV}-${maxV} V · ${vDisplay} V`}
         width={0.86}
         height={0.14}
         fontSize={32}

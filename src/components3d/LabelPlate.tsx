@@ -20,9 +20,9 @@ export function LabelPlate({
   subtext,
   width = 0.85,
   height = 0.22,
-  bg = '#0f172a',
-  fg = '#f8fafc',
-  border = '#475569',
+  bg = '#070c14',
+  fg = '#f1f5f9',
+  border = '#0891b2',
   fontSize = 38,
   position = [0, 0, 0],
   rotation = [0, 0, 0],
@@ -45,13 +45,13 @@ export function LabelPlate({
       ctx.textBaseline = 'middle';
 
       if (subtext) {
-        ctx.font = `700 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.font = `700 ${fontSize}px "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif`;
         ctx.fillText(text, canvas.width / 2, canvas.height * 0.36);
-        ctx.font = `500 ${Math.round(fontSize * 0.68)}px ui-monospace, monospace`;
-        ctx.fillStyle = '#cbd5e1';
+        ctx.font = `500 ${Math.round(fontSize * 0.68)}px "JetBrains Mono", ui-monospace, monospace`;
+        ctx.fillStyle = '#67e8f9';
         ctx.fillText(subtext, canvas.width / 2, canvas.height * 0.72);
       } else {
-        ctx.font = `700 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.font = `700 ${fontSize}px "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif`;
         ctx.fillText(text, canvas.width / 2, canvas.height / 2);
       }
     }
@@ -203,10 +203,10 @@ export function MeterDial({
 
       // Numeric readout strip under dial (omitted when student disables numeric readouts)
       if (showNumericReadout) {
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = '#070c14';
         ctx.fillRect(48, canvas.height - 58, canvas.width - 96, 44);
-        ctx.fillStyle = damaged ? '#f87171' : '#38bdf8';
-        ctx.font = '700 28px ui-monospace, monospace';
+        ctx.fillStyle = damaged ? '#f87171' : '#00f2fe';
+        ctx.font = '700 28px "JetBrains Mono", ui-monospace, monospace';
         ctx.fillText(renderedText, cx, canvas.height - 35);
       }
     }

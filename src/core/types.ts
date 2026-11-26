@@ -12,12 +12,25 @@ export type WireEndpointPair = [TerminalId, TerminalId];
 
 export type ComponentType =
   | 'acSupply'
+  | 'acSupply3ph'
+  | 'dcSupply'
+  | 'potDivider'
   | 'variac1ph'
+  | 'variac3ph'
   | 'wattmeter'
   | 'transformer1ph'
+  | 'transformer3ph'
+  | 'transformer3phTrue'
+  | 'transformerCenterTap'
+  | 'transformerTeaser'
+  | 'inductionMotor3ph'
+  | 'currentTransformer'
+  | 'selectorSwitch'
   | 'voltmeter'
+  | 'probeVoltmeter'
   | 'ammeter'
-  | 'lampLoad';
+  | 'lampLoad'
+  | 'rheostat';
 
 export interface TerminalDef {
   name: string;
@@ -25,18 +38,27 @@ export interface TerminalDef {
   localPos: [number, number, number];
 }
 
+export type ControlValue = boolean | number | string;
+export type ControlValues = Record<string, ControlValue>;
+
+export type InternalLinksDef =
+  | [string, string][]
+  | ((controls: ControlValues, instance: ComponentInstance) => [string, string][]);
+
 export interface ComponentTypeDef {
   type: ComponentType;
   terminals: TerminalDef[];
-  internalLinks?: [string, string][];
+  internalLinks?: InternalLinksDef;
 }
+
+export type ComponentParamValue = number | string | boolean | number[];
 
 export interface ComponentInstance {
   id: string;
   type: ComponentType;
   label: string;
   position: [number, number, number];
-  params: Record<string, number | string>;
+  params: Record<string, ComponentParamValue>;
 }
 
 export type ControlDef =
@@ -46,6 +68,7 @@ export type ControlDef =
       kind: 'switch';
       label: string;
       defaultValue: boolean;
+      lockWhenSupplyOn?: boolean;
     }
   | {
       id: string;
@@ -55,6 +78,7 @@ export type ControlDef =
       min: number;
       max: number;
       step: number;
+      fineStep?: number;
       unit: string;
       defaultValue: number;
     }
@@ -63,9 +87,9 @@ export type ControlDef =
       componentId: string;
       kind: 'selector';
       label: string;
-      options: number[];
+      options: (number | string)[];
       unit: string;
-      defaultValue: number;
+      defaultValue: number | string;
     }
   | {
       id: string;
@@ -100,46 +124,202 @@ export interface FaultPattern {
   effectTarget?: string;
 }
 
-export type CameraPreset =
-  | 'overview'
-  | 'supply'
-  | 'transformer'
-  | 'meters'
-  | 'load';
+export type CameraPreset = string;
+
+export interface CameraPresetDef {
+  id: string;
+  label: string;
+  pos: [number, number, number];
+  target: [number, number, number];
+}
 
 export type LearnStepCondition =
   | {
       kind: 'v1-target';
       targetV: number;
       toleranceV: number;
+      meterId?: string;
+      controlId?: string;
+      unit?: string;
+      targetLabel?: string;
     }
   | {
       kind: 'no-load-ack';
       targetV: number;
       toleranceV: number;
       lamps: number;
+      meterId?: string;
+      loadControlId?: string;
     }
   | {
       kind: 'loaded-v1-target';
       minLamps: number;
       targetV: number;
       toleranceV: number;
+      meterId?: string;
+      loadControlId?: string;
     };
 
 export interface LearnStep {
   id: string;
+  stageId?: string;
   focus: string[];
   camera: CameraPreset;
   title: string;
   why: string;
   connectTerminals?: [TerminalId, TerminalId][];
+  disconnectTerminals?: [TerminalId, TerminalId][];
   completionCondition?: LearnStepCondition;
 }
 
+export type ObservationCellValue = number | boolean | string | null;
+export type ObservationRowValues = Record<string, ObservationCellValue>;
+
+export interface ObservationRow {
+  id: string;
+  sno: number;
+  values: ObservationRowValues;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [colId: string]: any;
+}
+
+export type ColumnSource =
+  | { kind: 'sno' }
+  | {
+      kind: 'meter';
+      meterId: string;
+      field?: 'shownValue' | 'dial' | 'mf' | 'trueValue';
+    }
+  | { kind: 'control'; controlId: string }
+  | {
+      kind: 'derived';
+      compute: (
+        row: ObservationRowValues,
+        params: Record<string, number>,
+      ) => number | null;
+    }
+  | {
+      kind: 'hidden';
+      capture: (ctx: {
+        output: PhysicsSolveOutput;
+        controls: ControlValues;
+        params: Record<string, number>;
+      }) => ObservationCellValue;
+    };
+
 export interface ColumnDef {
-  key: string;
+  id: string;
+  label: string;
+  shortLabel?: string;
+  unit?: string;
+  source: ColumnSource;
+  decimals?: number;
+  displayDecimals?: number;
+  hidden?: boolean;
+  placeholder?: string;
+}
+
+export interface RowRule {
+  id: string;
+  label?: string;
+  message: string | ((row: ObservationRow, params: Record<string, number>) => string);
+  amber: boolean;
+  highlightColumnIds?: string[];
+  predicate: (row: ObservationRow, params: Record<string, number>) => boolean;
+  minPassCount?: number;
+  failMessage?: (
+    passCount: number,
+    totalCount: number,
+    params: Record<string, number>,
+  ) => string;
+  failHint?: (
+    badRows: ObservationRow[],
+    params: Record<string, number>,
+  ) => string;
+  crossRowHint?: (
+    rows: ObservationRow[],
+    params: Record<string, number>,
+  ) => string | null;
+}
+
+export interface PrerequisiteDef {
+  id: string;
+  label: string | ((rows: ObservationRow[], params: Record<string, number>) => string);
+  predicate: (rows: ObservationRow[], params: Record<string, number>) => boolean;
+  failMessage: string;
+  failHint: string;
+}
+
+export interface ChartSeriesSpec {
+  yColumn: string;
+  label: string;
+  color?: string;
+  dashed?: boolean;
+  opacity?: number;
+  showPoints?: boolean;
+}
+
+export interface ChartReferenceLine {
+  axis: 'x' | 'y';
+  value: number;
+  label: string;
+  color?: string;
+}
+
+export interface ChartInputDef {
+  id: string;
   label: string;
   unit?: string;
+  placeholder?: string;
+  step?: string;
+}
+
+export interface ChartSpec {
+  id: string;
+  title: string;
+  subtitle?: string;
+  xColumn: string;
+  series: ChartSeriesSpec[];
+  xLabel: string;
+  yLabel: string;
+  xMin?: number;
+  xMax?: number;
+  yMin?: number;
+  yMax?: number;
+  referenceLines?: ChartReferenceLine[];
+  emptyText?: string;
+  inputs?: ChartInputDef[];
+  computeSeries?: (
+    inputValues: Record<string, number>,
+    params: Record<string, number>,
+  ) => { x: number; y: number }[][];
+}
+
+export type AnswerTolerance =
+  | { abs: number; rel?: undefined }
+  | { rel: number; abs?: undefined }
+  | { abs: number; rel: number };
+
+export interface AnswerSpec {
+  id: string;
+  label: string;
+  unit?: string;
+  kind: 'number' | 'choice';
+  options?: { value: string; label: string }[];
+  placeholder?: string;
+  step?: string;
+  truth: (
+    rows: ObservationRow[],
+    model: PhysicsModel,
+    params: Record<string, number>,
+    rowsByStage?: Record<string, ObservationRow[]>,
+  ) => number | string;
+  tolerance?: AnswerTolerance;
+  failHint: (
+    rows: ObservationRow[],
+    rowsByStage?: Record<string, ObservationRow[]>,
+  ) => string;
+  failMessage?: string;
 }
 
 export type NetCategoryKey =
@@ -149,11 +329,27 @@ export type NetCategoryKey =
   | 'secondary'
   | 'load';
 
-export interface ExperimentDef {
+export type StageCarryOver = 'none' | 'consistent-wires';
+
+export interface TwoReadingCaptureSpec {
+  selectorControlId: string;
+  firstOption: string;
+  secondOption: string;
+  firstLabel: string;
+  secondLabel: string;
+  invalidationControlIds: string[];
+  meterId: string;
+  reverseControlId?: string;
+}
+
+export interface StageDef {
   id: string;
   title: string;
-  object: string[];
-  components: ComponentInstance[];
+  summary: string;
+  componentIds: string[];
+  componentPositions?: Record<string, [number, number, number]>;
+  componentParams?: Record<string, Record<string, ComponentParamValue>>;
+  cameraPresets?: CameraPresetDef[];
   acceptedNetlists: Net[][];
   netLabels?: string[];
   netCategories?: string[];
@@ -164,9 +360,30 @@ export interface ExperimentDef {
   physicsModel: string;
   physicsParams: Record<string, number>;
   observationTable: ColumnDef[];
+  rowRules: RowRule[];
+  prerequisites: PrerequisiteDef[];
+  charts?: ChartSpec[];
   learnSteps: LearnStep[];
+  hints?: string[];
+  solutionNote?: string;
+  carryOver?: StageCarryOver;
+  probeEnabled?: boolean;
+  identificationMode?: 'winding-pairs' | 'phase-groups';
+  twoReadingCapture?: TwoReadingCaptureSpec;
+  rowGroupColumnId?: string;
+}
+
+export interface ExperimentDef {
+  id: string;
+  title: string;
+  object: string[];
+  components: ComponentInstance[];
+  stages: StageDef[];
+  answers: AnswerSpec[];
+  charts?: ChartSpec[];
   hints: string[];
   solutionNote: string;
+  phasorReport?: boolean | 'connections' | 'transformations';
 }
 
 export interface ExperimentSummary {
@@ -206,7 +423,16 @@ export interface ValidationResult {
   hintLevelAvailable: number;
 }
 
-export interface ConnectionState {
+export interface BaseConnectionState {
+  shorted: boolean;
+  shortFaults: FaultPattern[];
+  matchedFaultIds: string[];
+  energised: boolean;
+  loadConnected?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ConnectionState extends BaseConnectionState {
   shorted: boolean;
   shortFaults: FaultPattern[];
   matchedFaultIds: string[];
@@ -228,6 +454,35 @@ export interface MeterGains {
   vs: number;
   am: number;
   wm: number;
+  [meterId: string]: number;
+}
+
+export type MeterKind = 'voltmeter' | 'ammeter' | 'wattmeter';
+
+export interface MeterReading {
+  id: string;
+  label: string;
+  kind: MeterKind;
+  unit: string;
+  range: number;
+  trueValue: number;
+  shownValue: number;
+  ratio: number;
+  pointerRatio: number;
+  overrange: boolean;
+  damaged: boolean;
+  reversed: boolean;
+  decimals?: number;
+  vRange?: number;
+  iRange?: number;
+  divisions?: number;
+  pf?: number;
+  mf?: number;
+  dial?: number;
+  i1?: number;
+  v1?: number;
+  ccOverrange?: boolean;
+  pcOverrange?: boolean;
 }
 
 export interface AnalogMeterReading {
@@ -245,6 +500,7 @@ export interface WattmeterReading extends AnalogMeterReading {
   vRange: number;
   iRange: number;
   divisions: number;
+  pf: number;
   mf: number;
   dial: number;
   i1: number;
@@ -290,17 +546,70 @@ export interface TransformerLoadOutput {
   events: RuntimeEvent[];
 }
 
-export interface ObservationRow {
+export interface PhysicsSolveInput<
+  TConn extends BaseConnectionState = BaseConnectionState,
+> {
+  params: Record<string, number>;
+  controls: ControlValues;
+  connectionState: TConn;
+  gains: Record<string, number>;
+  seed?: number;
+  options?: {
+    noSag?: boolean;
+    [key: string]: unknown;
+  };
+  components?: ComponentInstance[];
+}
+
+export interface PhysicsSolveOutput {
+  meters: MeterReading[];
+  events: RuntimeEvent[];
+  mcbTripped: boolean;
+  runFailed: boolean;
+  outputs: Record<string, number>;
+}
+
+export interface NetGraphLike {
+  areConnected: (a: TerminalId, b: TerminalId) => boolean;
+}
+
+export interface StageValidationInput {
+  stage: StageDef;
+  stageIndex: number;
+  wires: { a: TerminalId; b: TerminalId }[];
+  nets: Net[];
+  netGraph: NetGraphLike;
+  faults: FaultPattern[];
+  controls: ControlValues;
+  seed?: number;
+  identification?: {
+    pairs?: [TerminalId, TerminalId][];
+    phaseGroups?: string[][];
+  };
+}
+
+export interface LearnStepResolution {
+  connectTerminals?: [TerminalId, TerminalId][];
+  disconnectTerminals?: [TerminalId, TerminalId][];
+  probeTerminals?: [TerminalId, TerminalId];
+  identifiedPairs?: [TerminalId, TerminalId][];
+  identifiedPhases?: string[][];
+}
+
+export interface PhysicsModel<
+  TConn extends BaseConnectionState = BaseConnectionState,
+> {
   id: string;
-  sno: number;
-  v1: number;
-  i2: number;
-  v2: number;
-  dial: number;
-  mf: number;
-  p1: number;
-  lamps: number;
-  v1OutOfRange: boolean;
+  deriveConnectionState: (
+    nets: NetGraphLike,
+    controls: ControlValues,
+    stageParams: Record<string, number>,
+    faults?: FaultPattern[],
+    seed?: number,
+  ) => TConn;
+  solve: (input: PhysicsSolveInput<TConn>) => PhysicsSolveOutput;
+  validateStage?: (input: StageValidationInput) => ValidationResult | null;
+  resolveLearnStep?: (stepId: string, seed: number) => LearnStepResolution | null;
 }
 
 export interface RunAnswers {
@@ -327,4 +636,7 @@ export interface RunCheckResult {
   passed: boolean;
   failedCriteria: string[];
   hints: string[];
+  failedPrerequisites?: string[];
+  failedRowRules?: string[];
+  failedAnswers?: string[];
 }

@@ -1,8 +1,22 @@
+import { wiresFromNetlist } from '../circuit/nets';
 import { ex3_1 } from './ex3_1';
+import { ex3_2 } from './ex3_2';
+import { ex3_3 } from './ex3_3';
+import { ex3_4 } from './ex3_4';
+import { ex3_5 } from './ex3_5';
+import { ex3_6 } from './ex3_6';
+import { ex4_1 } from './ex4_1';
+import { ex4_2 } from './ex4_2';
 import { ExperimentDefSchema } from './schema';
-import type { ExperimentDef, ExperimentSummary, Net, WireEndpointPair } from '../types';
+import type {
+  ExperimentDef,
+  ExperimentSummary,
+  Net,
+  TerminalId,
+  WireEndpointPair,
+} from '../types';
 
-const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1];
+const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1, ex3_2, ex3_3, ex3_4, ex3_5, ex3_6, ex4_1, ex4_2];
 
 export const EXPERIMENTS: Record<string, ExperimentDef> = Object.fromEntries(
   RAW_EXPERIMENTS.map((exp) => {
@@ -24,49 +38,49 @@ export const EXPERIMENT_SUMMARIES: ExperimentSummary[] = [
     number: '3.2',
     title: 'Open-circuit and short-circuit tests of single-phase transformer',
     group: 'transformers',
-    available: false,
+    available: true,
   },
   {
     id: 'ex3.3',
     number: '3.3',
     title: "Sumpner's test of single-phase transformer",
     group: 'transformers',
-    available: false,
+    available: true,
   },
   {
     id: 'ex3.4',
     number: '3.4',
     title: 'Parallel operation of single-phase transformers',
     group: 'transformers',
-    available: false,
+    available: true,
   },
   {
     id: 'ex3.5',
     number: '3.5',
     title: 'Study of various three-phase transformer connections',
     group: 'transformers',
-    available: false,
+    available: true,
   },
   {
     id: 'ex3.6',
     number: '3.6',
     title: 'Phase-transformation',
     group: 'transformers',
-    available: false,
+    available: true,
   },
   {
     id: 'ex4.1',
     number: '4.1',
     title: 'Load test of three-phase induction motor',
     group: 'induction',
-    available: false,
+    available: true,
   },
   {
     id: 'ex4.2',
     number: '4.2',
     title: 'No-load and blocked-rotor tests of three-phase induction motor',
     group: 'induction',
-    available: false,
+    available: true,
   },
   {
     id: 'ex4.5',
@@ -90,7 +104,13 @@ export function getExperiment(id: string): ExperimentDef {
  * Generates minimal star-topology wire pairs to realize a canonical netlist
  * (used by Show Solution).
  */
-export function netlistToWirePairs(netlist: Net[]): WireEndpointPair[] {
+export function netlistToWirePairs(
+  netlist: Net[],
+  internalLinks?: [TerminalId, TerminalId][],
+): WireEndpointPair[] {
+  if (internalLinks) {
+    return wiresFromNetlist(netlist, internalLinks);
+  }
   const pairs: WireEndpointPair[] = [];
   for (const net of netlist) {
     if (net.length < 2) continue;

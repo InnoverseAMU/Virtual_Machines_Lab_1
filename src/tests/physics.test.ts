@@ -1,24 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { deriveConnectionState, matchFaultPatterns } from '../core/circuit/faults';
 import { buildNets, type WireInput } from '../core/circuit/nets';
+import { getStage } from '../core/circuit/stages';
 import { ex3_1, NET_A } from '../core/experiments/ex3_1';
 import { netlistToWirePairs } from '../core/experiments/registry';
+import {
+  checkPowerOnSafety,
+  evaluateExperimentPhysics,
+  findMeterReading,
+} from '../core/physics/evaluate';
 import { drawSessionMeterGains } from '../core/physics/meters';
 import {
   DEFAULT_TRANSFORMER_PARAMS,
   solveTransformerLoad,
 } from '../core/physics/models/transformerLoad';
-import {
-  checkPowerOnSafety,
-  evaluateExperimentPhysics,
-} from '../core/physics/evaluate';
 import type { TransformerLoadControls, WireEndpointPair } from '../core/types';
 
 const CANONICAL_WIRES = netlistToWirePairs(NET_A);
+const stage = getStage(ex3_1, 0);
 
 function makeConn(wires: WireInput[], supplyOn = true) {
   const graph = buildNets(ex3_1.components, wires);
-  const faults = matchFaultPatterns(ex3_1.faultPatterns, graph);
+  const faults = matchFaultPatterns(stage.faultPatterns, graph);
   return deriveConnectionState(graph, faults, supplyOn);
 }
 
@@ -157,7 +160,6 @@ describe('Exp 3.1 physics and meter models', () => {
     );
     expect(out.meters.wm.shownValue).toBe(0);
     expect(out.meters.wm.dial).toBe(0);
-    // Secondary still delivers load because primary path through CC is intact
     expect(out.I2).toBeGreaterThan(15);
   });
 
@@ -201,7 +203,6 @@ describe('Exp 3.1 physics and meter models', () => {
 
   it('pegs and damages meters above 100% and 150% of range, and fails run >125% I2', () => {
     const conn = makeConn(CANONICAL_WIRES, true);
-    // Low wattmeter range (2.5 A) with 10 lamps (I1 ~ 8.5 A > 1.5 * 2.5 = 3.75 A -> damaged)
     const outWmDamaged = solveTransformerLoad(
       DEFAULT_TRANSFORMER_PARAMS,
       { ...baseControls, lamps: 10, wmIRange: 2.5 },
@@ -210,7 +211,6 @@ describe('Exp 3.1 physics and meter models', () => {
     expect(outWmDamaged.meters.wm.damaged).toBe(true);
     expect(outWmDamaged.meters.wm.shownValue).toBe(0);
 
-    // Overvoltage to push I2 > 21.7 A (e.g. variac at 260 V, 12 lamps)
     const outOverload = solveTransformerLoad(
       DEFAULT_TRANSFORMER_PARAMS,
       { ...baseControls, variacV: 260, lamps: 12 },
@@ -223,7 +223,7 @@ describe('Exp 3.1 physics and meter models', () => {
     );
   });
 
-  it('evaluateExperimentPhysics maps ex3_1 + NET_A + controls to Section 6 reference values', () => {
+  it('evaluateExperimentPhysics maps ex3_1 + NET_A + controls to generic MeterReading[] and outputs', () => {
     const res = evaluateExperimentPhysics(
       ex3_1,
       CANONICAL_WIRES,
@@ -233,12 +233,14 @@ describe('Exp 3.1 physics and meter models', () => {
     );
 
     expect(res.connectionState.loadConnected).toBe(true);
-    expect(res.output.V1).toBeCloseTo(230, 5);
-    expect(Math.abs(res.output.I2 - 17.0) / 17.0).toBeLessThan(0.01);
-    expect(Math.abs(res.output.V2 - 112.4) / 112.4).toBeLessThan(0.01);
-    expect(
-      res.output.meters.wm.dial * res.output.meters.wm.mf,
-    ).toBeCloseTo(res.output.Pin, 10);
+    expect(res.connectionState.energised).toBe(true);
+    expect(res.output.outputs.V1).toBeCloseTo(230, 5);
+    expect(Math.abs(res.output.outputs.I2 - 17.0) / 17.0).toBeLessThan(0.01);
+    expect(Math.abs(res.output.outputs.V2 - 112.4) / 112.4).toBeLessThan(0.01);
+
+    const wm = findMeterReading(res.output, 'wm')!;
+    expect(wm).toBeDefined();
+    expect((wm.dial ?? 0) * (wm.mf ?? 1)).toBeCloseTo(res.output.outputs.Pin, 10);
   });
 
   it('checkPowerOnSafety warns when powered ON above 10 V and passes at <= 10 V', () => {

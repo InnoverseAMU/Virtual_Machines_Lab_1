@@ -43,10 +43,30 @@ function ThemeIcon({
   );
 }
 
-export function ThemeToggleButton() {
+interface ThemeToggleButtonProps {
+  variant?: 'default' | 'vault';
+}
+
+export function ThemeToggleButton({
+  variant = 'default',
+}: ThemeToggleButtonProps) {
   const mode = useThemeStore((s) => s.mode);
   const resolved = useThemeStore((s) => s.resolved);
   const cycleMode = useThemeStore((s) => s.cycleMode);
+
+  if (variant === 'vault') {
+    return (
+      <button
+        type="button"
+        onClick={cycleMode}
+        aria-label={`Color theme: ${MODE_LABELS[mode]} (${resolved}). Click to cycle system, light, dark.`}
+        className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white/85 px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs transition-colors hover:border-slate-400 hover:text-slate-950 dark:border-slate-700/60 dark:bg-slate-900/80 dark:text-slate-300 dark:hover:border-cyan-500/50 dark:hover:text-white"
+      >
+        <ThemeIcon mode={mode} resolved={resolved} />
+        <span>{MODE_LABELS[mode]}</span>
+      </button>
+    );
+  }
 
   return (
     <button

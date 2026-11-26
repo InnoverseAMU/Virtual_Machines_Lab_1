@@ -1,13 +1,23 @@
+import { useEffect, useState } from 'react';
 import type { LearnConditionStatus } from '../core/circuit/learn';
+import {
+  resolvePublicAssetUrl,
+  type DiagramAsset,
+} from '../core/experiments/assets';
 import type { LearnStep } from '../core/types';
 
 interface LearnPlayerProps {
+  experimentTitle: string;
+  stageTitle?: string;
   step: LearnStep;
   stepIndex: number;
   totalSteps: number;
   conditionStatus: LearnConditionStatus;
   showNumericReadouts: boolean;
   onToggleNumericReadouts: () => void;
+  diagrams: DiagramAsset[];
+  diagramPanelOpen: boolean;
+  onToggleDiagram: () => void;
   learnFinished: boolean;
   onNext: () => void;
   onBack: () => void;
@@ -20,13 +30,113 @@ interface LearnPlayerProps {
   onExit: () => void;
 }
 
+function EndCircuitDiagramPreview({
+  diagrams,
+  diagramPanelOpen,
+  onToggleDiagram,
+}: {
+  diagrams: DiagramAsset[];
+  diagramPanelOpen: boolean;
+  onToggleDiagram: () => void;
+}) {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    setIdx(0);
+  }, [diagrams]);
+
+  if (diagrams.length === 0) return null;
+  const safeIdx = Math.min(idx, diagrams.length - 1);
+  const current = diagrams[safeIdx];
+
+  return (
+    <div
+      className="space-y-1.5 rounded-xl p-2 text-xs"
+      style={{
+        backgroundColor: 'var(--vml-panel-hover)',
+        border: '1px solid var(--vml-border)',
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold">
+          This is the circuit diagram that we have built.
+        </span>
+        <button
+          type="button"
+          onClick={onToggleDiagram}
+          className="shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold underline"
+          style={{ color: 'var(--vml-accent)' }}
+        >
+          {diagramPanelOpen ? 'Hide viewer' : 'Expand (D)'}
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-lg bg-white/95 p-1">
+        <img
+          src={resolvePublicAssetUrl(current.src, import.meta.env.BASE_URL)}
+          alt={current.alt}
+          className="max-h-36 w-full object-contain"
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-2 text-[11px]">
+        <span
+          className="min-w-0 truncate"
+          style={{ color: 'var(--vml-text-muted)' }}
+          title={current.caption}
+        >
+          {current.caption}
+        </span>
+        {diagrams.length > 1 && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                setIdx((i) => (i - 1 + diagrams.length) % diagrams.length)
+              }
+              aria-label="Previous circuit diagram"
+              className="rounded px-1.5 py-0.5 text-[11px] font-semibold"
+              style={{
+                backgroundColor: 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+              }}
+            >
+              ‹
+            </button>
+            <span className="font-mono text-[10px]">
+              {safeIdx + 1}/{diagrams.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setIdx((i) => (i + 1) % diagrams.length)}
+              aria-label="Next circuit diagram"
+              className="rounded px-1.5 py-0.5 text-[11px] font-semibold"
+              style={{
+                backgroundColor: 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+              }}
+            >
+              ›
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function LearnPlayer({
+  experimentTitle,
+  stageTitle,
   step,
   stepIndex,
   totalSteps,
   conditionStatus,
   showNumericReadouts,
   onToggleNumericReadouts,
+  diagrams,
+  diagramPanelOpen,
+  onToggleDiagram,
   learnFinished,
   onNext,
   onBack,
@@ -41,13 +151,15 @@ export function LearnPlayer({
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === totalSteps - 1;
   const showHiddenNumbersNote =
-    !showNumericReadouts && (stepIndex === 12 || stepIndex === 14);
+    !showNumericReadouts &&
+    (step.completionCondition?.kind === 'no-load-ack' ||
+      step.focus.includes('wm'));
   const nextDisabled = conditionStatus.hasCondition && !conditionStatus.met;
 
   return (
     <section
       aria-label="Guided walkthrough"
-      className="pointer-events-auto absolute right-2 bottom-14 left-2 z-20 max-w-[calc(100%-1rem)] rounded-2xl p-3.5 shadow-2xl backdrop-blur md:right-auto md:bottom-3 md:left-3 md:w-[360px] md:max-w-[calc(100%-1.5rem)] md:p-4"
+      className="pointer-events-auto absolute right-2 bottom-14 left-2 z-20 max-w-[calc(100%-1rem)] rounded-2xl p-3.5 shadow-2xl backdrop-blur-md md:right-auto md:bottom-3 md:left-3 md:w-[360px] md:max-w-[calc(100%-1.5rem)] md:p-4 dark:shadow-[0_0_28px_-8px_rgba(0,242,254,0.22)]"
       style={{
         backgroundColor: 'var(--vml-panel)',
         border: '1px solid var(--vml-border)',
@@ -68,17 +180,21 @@ export function LearnPlayer({
               Exit
             </button>
           </div>
-          <h2 className="text-sm font-bold md:text-base">
-            Exp 3.1 Guided Walkthrough Complete
+          <h2 className="font-space text-sm font-bold md:text-base">
+            {experimentTitle} Walkthrough Complete
           </h2>
           <p
             className="text-xs leading-relaxed"
             style={{ color: 'var(--vml-text-muted)' }}
           >
-            You have wired the single-phase transformer load test, measured
-            no-load and loaded readings while holding 230 V, and reviewed the
-            regulation and efficiency formulas.
+            You have completed the guided wiring, live instrument checks, and
+            result calculations for this experiment.
           </p>
+          <EndCircuitDiagramPreview
+            diagrams={diagrams}
+            diagramPanelOpen={diagramPanelOpen}
+            onToggleDiagram={onToggleDiagram}
+          />
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               type="button"
@@ -106,28 +222,62 @@ export function LearnPlayer({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {/* Header: progress + exit */}
+          {/* Header: progress + stage badge + exit */}
           <div className="flex items-center justify-between gap-2">
-            <span
-              className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold"
-              style={{
-                backgroundColor: 'var(--vml-panel-hover)',
-                color: 'var(--vml-accent)',
-                border: '1px solid var(--vml-border)',
-              }}
-            >
-              Step {stepIndex + 1} of {totalSteps}
-            </span>
-            <button
-              type="button"
-              onClick={onExit}
-              className="rounded-lg px-2 py-0.5 text-xs font-semibold opacity-80 hover:opacity-100"
-            >
-              Exit (Esc)
-            </button>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold"
+                style={{
+                  backgroundColor: 'var(--vml-panel-hover)',
+                  color: 'var(--vml-accent)',
+                  border: '1px solid var(--vml-border)',
+                }}
+              >
+                Step {stepIndex + 1} of {totalSteps}
+              </span>
+              {stageTitle && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    color: 'var(--vml-text-muted)',
+                  }}
+                >
+                  {stageTitle}
+                </span>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              {diagrams.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onToggleDiagram}
+                  aria-pressed={diagramPanelOpen}
+                  className="rounded-lg px-2 py-0.5 text-[11px] font-semibold transition"
+                  style={{
+                    backgroundColor: diagramPanelOpen
+                      ? 'var(--vml-accent)'
+                      : 'var(--vml-panel-hover)',
+                    color: diagramPanelOpen
+                      ? 'var(--vml-accent-text)'
+                      : 'var(--vml-text)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  Diagram (D)
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onExit}
+                className="rounded-lg px-2 py-0.5 text-xs font-semibold opacity-80 hover:opacity-100"
+              >
+                Exit (Esc)
+              </button>
+            </div>
           </div>
 
-          <h2 className="text-sm font-bold leading-snug md:text-base">
+          <h2 className="font-space text-sm font-bold leading-snug md:text-base">
             {step.title}
           </h2>
 
@@ -137,6 +287,14 @@ export function LearnPlayer({
           >
             {step.why}
           </p>
+
+          {isLast && (
+            <EndCircuitDiagramPreview
+              diagrams={diagrams}
+              diagramPanelOpen={diagramPanelOpen}
+              onToggleDiagram={onToggleDiagram}
+            />
+          )}
 
           {showHiddenNumbersNote && (
             <div
@@ -203,7 +361,6 @@ export function LearnPlayer({
             </div>
           )}
 
-          {/* Footer controls */}
           <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
             <div className="flex items-center gap-1.5">
               <button

@@ -4,6 +4,7 @@ import type {
   TerminalId,
   ValidationResult,
 } from '../types';
+import { getStage, getStageHints } from './stages';
 
 const CATEGORY_MESSAGES: Record<NetCategoryKey, string> = {
   supply: 'The supply side is incomplete.',
@@ -24,18 +25,20 @@ export interface FeedbackOutput {
 }
 
 /**
- * Formats a ValidationResult into grouped category-level messages, Spec Section 5
- * fault feedback, and progressive hints without revealing exact wires until
- * the final hint level is reached.
+ * Formats a ValidationResult into grouped category-level messages, fault feedback,
+ * and progressive hints without revealing exact wires until the final hint level.
  */
 export function buildFeedback(
   experiment: ExperimentDef,
   result: ValidationResult,
   hintLevel: number,
+  stageIndex = 0,
 ): FeedbackOutput {
-  const maxHints = experiment.hints.length;
+  const stage = getStage(experiment, stageIndex);
+  const hints = getStageHints(experiment, stage);
+  const maxHints = hints.length;
   const clampedHintLevel = Math.max(0, Math.min(maxHints, Math.floor(hintLevel)));
-  const revealedHints = experiment.hints.slice(0, clampedHintLevel);
+  const revealedHints = hints.slice(0, clampedHintLevel);
   const remainingHints = Math.max(0, maxHints - clampedHintLevel);
 
   if (result.correct) {
@@ -91,7 +94,6 @@ export function buildFeedback(
           ? 'Circuit wiring is incomplete.'
           : 'Unexpected wiring connection detected.';
 
-  // Hint 6 (the final hint level) is only reachable after hints 1..5
   const terminalPairHint =
     clampedHintLevel >= maxHints && result.openNets.length > 0
       ? result.openNets[0].missingPairHint

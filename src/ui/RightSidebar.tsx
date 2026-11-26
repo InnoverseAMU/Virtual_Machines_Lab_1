@@ -1,22 +1,32 @@
 import { memo, useRef, useState } from 'react';
+import { getStage } from '../core/circuit/stages';
+import {
+  canonicalPairKey,
+  resolveScrambledTerminalLabels,
+} from '../core/phasor/ex3_5Scramble';
+import { isSupplySwitchOn } from '../core/physics/evaluate';
+import { describeWattmeterCcLinkMode } from '../core/physics/meters';
 import { MAX_OBSERVATION_ROWS } from '../core/physics/report';
 import type {
   ControlDef,
   ExperimentDef,
-  TransformerLoadOutput,
+  MeterReading,
+  PhysicsSolveOutput,
 } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { ObservationsPanel } from './ObservationsPanel';
+import { TwoReadingCaptureBar } from './TwoReadingCaptureBar';
 
 type SidebarTab = 'bench' | 'observations';
 
 interface RightSidebarProps {
   experiment: ExperimentDef;
   controls: ControlDef[];
-  output: TransformerLoadOutput;
-  primaryEnergised: boolean;
+  output: PhysicsSolveOutput;
+  energised: boolean;
   controlsLocked?: boolean;
+  unlockHint?: string;
 }
 
 function StatusBadge({
@@ -64,23 +74,18 @@ function StatusBadge({
 const ControlsSection = memo(function ControlsSection({
   controls,
   controlsLocked = false,
+  unlockHint,
 }: {
   controls: ControlDef[];
   controlsLocked?: boolean;
+  unlockHint?: string;
 }) {
-  const supplyOn = useControlsStore((s) => s.supplyOn);
+  const values = useControlsStore((s) => s.values);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
-  const variacV = useControlsStore((s) => s.variacV);
-  const wmVRange = useControlsStore((s) => s.wmVRange);
-  const wmIRange = useControlsStore((s) => s.wmIRange);
   const lampStates = useControlsStore((s) => s.lampStates);
-  const lamps = useControlsStore((s) => s.lamps);
 
-  const toggleSupply = useControlsStore((s) => s.toggleSupply);
-  const setVariacV = useControlsStore((s) => s.setVariacV);
-  const stepVariacV = useControlsStore((s) => s.stepVariacV);
-  const setWmVRange = useControlsStore((s) => s.setWmVRange);
-  const setWmIRange = useControlsStore((s) => s.setWmIRange);
+  const setControlValue = useControlsStore((s) => s.setControlValue);
+  const stepControlValue = useControlsStore((s) => s.stepControlValue);
   const toggleLampIndex = useControlsStore((s) => s.toggleLampIndex);
   const setLamps = useControlsStore((s) => s.setLamps);
 
@@ -88,7 +93,7 @@ const ControlsSection = memo(function ControlsSection({
     <section aria-label="Bench controls" className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2
-          className="text-[11px] font-bold tracking-wider uppercase"
+          className="font-space text-[11px] font-bold tracking-wider uppercase"
           style={{ color: 'var(--vml-text-muted)' }}
         >
           Controls
@@ -98,7 +103,7 @@ const ControlsSection = memo(function ControlsSection({
             className="text-[10px] font-medium"
             style={{ color: 'var(--vml-text-muted)' }}
           >
-            Unlocks at step 12
+            {unlockHint ?? 'Locked for wiring step'}
           </span>
         )}
       </div>
@@ -109,35 +114,65 @@ const ControlsSection = memo(function ControlsSection({
       >
         {controls.map((ctrl) => {
           if (ctrl.kind === 'switch') {
+            const isOn = Boolean(values[ctrl.id]);
+            const isSupply =
+              ctrl.id === 'sup.switch' ||
+              ctrl.id === 'sup3.switch' ||
+              ctrl.id === 'dcSupply.switch';
+            const lockedBySupply = Boolean(
+              ctrl.lockWhenSupplyOn && isSupplySwitchOn(values),
+            );
             return (
               <div key={ctrl.id} className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-medium">{ctrl.label}</span>
-                  {mcbTripped && <StatusBadge tripped />}
+                  {isSupply && mcbTripped && <StatusBadge tripped />}
                 </div>
                 <button
                   type="button"
-                  onClick={toggleSupply}
-                  aria-pressed={supplyOn}
-                  className={`w-full rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                    supplyOn
+                  disabled={lockedBySupply}
+                  title={
+                    lockedBySupply
+                      ? 'Shut off the supply before toggling this switch.'
+                      : undefined
+                  }
+                  onClick={() => setControlValue(ctrl.id, !isOn)}
+                  aria-pressed={isOn}
+                  className={`w-full rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    isOn
                       ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                      : mcbTripped
+                      : isSupply && mcbTripped
                         ? 'bg-red-700 text-white hover:bg-red-600'
                         : 'bg-slate-700 text-slate-100 hover:bg-slate-600'
                   }`}
                 >
-                  {supplyOn
-                    ? 'Supply: ON (Click to Shut Off)'
-                    : mcbTripped
-                      ? 'MCB Tripped — Click to Reset & Energise'
-                      : 'Supply: OFF (Click to Energise)'}
+                  {isSupply
+                    ? isOn
+                      ? 'Supply: ON (Click to Shut Off)'
+                      : mcbTripped
+                        ? 'MCB Tripped — Click to Reset & Energise'
+                        : 'Supply: OFF (Click to Energise)'
+                    : isOn
+                      ? `${ctrl.label}: ON`
+                      : `${ctrl.label}: OFF`}
                 </button>
+                {lockedBySupply && (
+                  <p className="text-[10px] text-amber-400">
+                    Shut off supply to change this lock.
+                  </p>
+                )}
               </div>
             );
           }
 
           if (ctrl.kind === 'knob') {
+            const val = Number(values[ctrl.id] ?? ctrl.defaultValue);
+            const fine = ctrl.fineStep ?? 0.1;
+            const formatted =
+              ctrl.step < 1 || !Number.isInteger(val)
+                ? val.toFixed(1)
+                : String(val);
+
             return (
               <div key={ctrl.id} className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -148,7 +183,7 @@ const ControlsSection = memo(function ControlsSection({
                     className="font-mono text-xs font-bold tabular-nums"
                     style={{ color: 'var(--vml-accent)' }}
                   >
-                    {variacV} {ctrl.unit}
+                    {formatted} {ctrl.unit}
                   </span>
                 </div>
                 <input
@@ -157,28 +192,45 @@ const ControlsSection = memo(function ControlsSection({
                   min={ctrl.min}
                   max={ctrl.max}
                   step={ctrl.step}
-                  value={variacV}
+                  value={val}
                   onChange={(e) =>
-                    setVariacV(Number(e.target.value), ctrl.min, ctrl.max)
+                    setControlValue(ctrl.id, Number(e.target.value))
                   }
-                  className="w-full accent-sky-500"
+                  className="w-full accent-sky-500 dark:accent-cyan-400"
                 />
-                <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-1">
                   <button
                     type="button"
-                    onClick={() => stepVariacV(-ctrl.step, ctrl.min, ctrl.max)}
-                    className="flex-1 rounded-md px-2 py-1 text-xs font-medium"
+                    onClick={() =>
+                      stepControlValue(ctrl.id, -ctrl.step, ctrl.min, ctrl.max, ctrl.step)
+                    }
+                    className="flex-1 rounded-md px-1.5 py-1 text-[11px] font-medium"
                     style={{
                       backgroundColor: 'var(--vml-panel-hover)',
                       border: '1px solid var(--vml-border)',
                     }}
                   >
-                    -{ctrl.step} {ctrl.unit}
+                    -{ctrl.step}
                   </button>
+                  {fine < ctrl.step && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        stepControlValue(ctrl.id, -fine, ctrl.min, ctrl.max, fine)
+                      }
+                      className="rounded-md px-1.5 py-1 text-[11px] font-medium"
+                      style={{
+                        backgroundColor: 'var(--vml-panel-hover)',
+                        border: '1px solid var(--vml-border)',
+                      }}
+                    >
+                      -{fine}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setVariacV(0, ctrl.min, ctrl.max)}
-                    className="rounded-md px-2.5 py-1 text-xs font-medium"
+                    onClick={() => setControlValue(ctrl.id, 0)}
+                    className="rounded-md px-2 py-1 text-[11px] font-medium"
                     style={{
                       backgroundColor: 'var(--vml-panel-hover)',
                       border: '1px solid var(--vml-border)',
@@ -186,16 +238,33 @@ const ControlsSection = memo(function ControlsSection({
                   >
                     Zero
                   </button>
+                  {fine < ctrl.step && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        stepControlValue(ctrl.id, fine, ctrl.min, ctrl.max, fine)
+                      }
+                      className="rounded-md px-1.5 py-1 text-[11px] font-medium"
+                      style={{
+                        backgroundColor: 'var(--vml-panel-hover)',
+                        border: '1px solid var(--vml-border)',
+                      }}
+                    >
+                      +{fine}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => stepVariacV(ctrl.step, ctrl.min, ctrl.max)}
-                    className="flex-1 rounded-md px-2 py-1 text-xs font-medium"
+                    onClick={() =>
+                      stepControlValue(ctrl.id, ctrl.step, ctrl.min, ctrl.max, ctrl.step)
+                    }
+                    className="flex-1 rounded-md px-1.5 py-1 text-[11px] font-medium"
                     style={{
                       backgroundColor: 'var(--vml-panel-hover)',
                       border: '1px solid var(--vml-border)',
                     }}
                   >
-                    +{ctrl.step} {ctrl.unit}
+                    +{ctrl.step}
                   </button>
                 </div>
               </div>
@@ -203,28 +272,27 @@ const ControlsSection = memo(function ControlsSection({
           }
 
           if (ctrl.kind === 'selector') {
-            const isV = ctrl.id === 'wm.vRange';
-            const activeVal = isV ? wmVRange : wmIRange;
+            const activeVal = values[ctrl.id] ?? ctrl.defaultValue;
+            const isCcRange = ctrl.id.endsWith('.iRange');
+            const isPcRange = ctrl.id.endsWith('.vRange');
+            const numericOpts = ctrl.options.filter(
+              (o): o is number => typeof o === 'number',
+            );
             return (
               <div key={ctrl.id} className="space-y-1">
                 <span className="block text-xs font-medium">{ctrl.label}</span>
                 <div className="grid grid-cols-3 gap-1.5">
                   {ctrl.options.map((opt) => {
                     const active = activeVal === opt;
+                    const ccMode =
+                      isCcRange && typeof opt === 'number'
+                        ? describeWattmeterCcLinkMode(opt, numericOpts)
+                        : null;
                     return (
                       <button
-                        key={opt}
+                        key={String(opt)}
                         type="button"
-                        onClick={() => {
-                          if (isV && (opt === 150 || opt === 300)) {
-                            setWmVRange(opt);
-                          } else if (
-                            !isV &&
-                            (opt === 2.5 || opt === 5 || opt === 10)
-                          ) {
-                            setWmIRange(opt);
-                          }
-                        }}
+                        onClick={() => setControlValue(ctrl.id, opt)}
                         className="rounded-md px-2 py-1 text-xs font-semibold transition"
                         style={{
                           backgroundColor: active
@@ -236,22 +304,49 @@ const ControlsSection = memo(function ControlsSection({
                           border: '1px solid var(--vml-border)',
                         }}
                       >
-                        {opt} {ctrl.unit}
+                        <span>
+                          {opt}
+                          {ctrl.unit ? ` ${ctrl.unit}` : ''}
+                        </span>
+                        {ccMode && (
+                          <span className="block text-[9px] font-medium opacity-80">
+                            {ccMode.label}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
+                {isCcRange && (
+                  <p
+                    className="text-[10px] leading-snug"
+                    style={{ color: 'var(--vml-text-muted)' }}
+                  >
+                    CC link: Series = low I rating · Parallel = double (high) I
+                    rating. Click I plate on 3D wattmeter or here.
+                  </p>
+                )}
+                {isPcRange && (
+                  <p
+                    className="text-[10px] leading-snug"
+                    style={{ color: 'var(--vml-text-muted)' }}
+                  >
+                    PC tap: adds internal series multiplier resistor for higher
+                    voltage rating.
+                  </p>
+                )}
               </div>
             );
           }
 
           if (ctrl.kind === 'steps') {
+            const countVal = Number(values[ctrl.id] ?? ctrl.defaultValue);
             const activeLampSlice = lampStates.slice(0, ctrl.max);
             return (
               <div key={ctrl.id} className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium tabular-nums">
-                    {ctrl.label} ({lamps}/{ctrl.max})
+                    {ctrl.label} ({countVal}/{ctrl.max})
                   </span>
                   <button
                     type="button"
@@ -271,7 +366,7 @@ const ControlsSection = memo(function ControlsSection({
                       key={idx}
                       type="button"
                       aria-pressed={isOn}
-                      onClick={() => toggleLampIndex(idx)}
+                      onClick={() => toggleLampIndex(idx, ctrl.id)}
                       className="rounded-md py-1 text-[11px] font-semibold transition"
                       style={{
                         backgroundColor: isOn
@@ -296,66 +391,31 @@ const ControlsSection = memo(function ControlsSection({
   );
 });
 
-interface ReadingsSectionProps {
-  vpText: string;
-  vpOverrange: boolean;
-  vpDamaged: boolean;
-  vsText: string;
-  vsOverrange: boolean;
-  vsDamaged: boolean;
-  amText: string;
-  amOverrange: boolean;
-  amDamaged: boolean;
-  wmDialText: string;
-  wmMfText: string;
-  wmPowerText: string;
-  wmOverrange: boolean;
-  wmDamaged: boolean;
-  wmReversed: boolean;
-  wmVRange: number;
-  wmIRange: number;
-  vpRange: number;
-  vsRange: number;
-  amRange: number;
-  supplyOn: boolean;
-  mcbTripped: boolean;
-  variacV: number;
-  showNumericReadouts: boolean;
-  onToggleNumericReadouts: () => void;
-}
-
 const ReadingsSection = memo(function ReadingsSection({
-  vpText,
-  vpOverrange,
-  vpDamaged,
-  vsText,
-  vsOverrange,
-  vsDamaged,
-  amText,
-  amOverrange,
-  amDamaged,
-  wmDialText,
-  wmMfText,
-  wmPowerText,
-  wmOverrange,
-  wmDamaged,
-  wmReversed,
-  wmVRange,
-  wmIRange,
-  vpRange,
-  vsRange,
-  amRange,
+  meters,
   supplyOn,
   mcbTripped,
   variacV,
+  hasVariac,
   showNumericReadouts,
   onToggleNumericReadouts,
-}: ReadingsSectionProps) {
+}: {
+  meters: MeterReading[];
+  supplyOn: boolean;
+  mcbTripped: boolean;
+  variacV: number;
+  hasVariac: boolean;
+  showNumericReadouts: boolean;
+  onToggleNumericReadouts: () => void;
+}) {
+  const analogMeters = meters.filter((m) => m.kind !== 'wattmeter');
+  const wattmeters = meters.filter((m) => m.kind === 'wattmeter');
+
   return (
     <section aria-label="Meter readings" className="space-y-2.5 text-xs">
       <div className="flex items-center justify-between gap-2">
         <h2
-          className="text-[11px] font-bold tracking-wider uppercase"
+          className="font-space text-[11px] font-bold tracking-wider uppercase"
           style={{ color: 'var(--vml-text-muted)' }}
         >
           Readings
@@ -371,9 +431,11 @@ const ReadingsSection = memo(function ReadingsSection({
           >
             {supplyOn ? 'ON' : 'OFF'}
           </span>
-          <span className="font-mono text-[11px] font-semibold tabular-nums">
-            {variacV} V
-          </span>
+          {hasVariac && (
+            <span className="font-mono text-[11px] font-semibold tabular-nums">
+              {Number.isInteger(variacV) ? variacV : variacV.toFixed(1)} V
+            </span>
+          )}
         </div>
       </div>
 
@@ -414,119 +476,107 @@ const ReadingsSection = memo(function ReadingsSection({
         </button>
       </div>
 
-      {/* Analog Meters */}
-      <div
-        className="space-y-2 rounded-xl p-2.5"
-        style={{ border: '1px solid var(--vml-border)' }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">V primary</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              vp · 0–{vpRange} V
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusBadge damaged={vpDamaged} overrange={vpOverrange} />
-            <span className="font-mono text-sm font-bold tabular-nums">
-              {showNumericReadouts ? `${vpText} V` : '— V'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">V secondary</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              vs · 0–{vsRange} V
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusBadge damaged={vsDamaged} overrange={vsOverrange} />
-            <span className="font-mono text-sm font-bold tabular-nums">
-              {showNumericReadouts ? `${vsText} V` : '— V'}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">A secondary</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              am · 0–{amRange} A
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <StatusBadge damaged={amDamaged} overrange={amOverrange} />
-            <span className="font-mono text-sm font-bold tabular-nums">
-              {showNumericReadouts ? `${amText} A` : '— A'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Wattmeter */}
-      <div
-        className="space-y-1.5 rounded-xl p-2.5"
-        style={{ border: '1px solid var(--vml-border)' }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="font-semibold">Wattmeter</div>
-            <div
-              className="text-[10px]"
-              style={{ color: 'var(--vml-text-muted)' }}
-            >
-              wm · {wmVRange} V / {wmIRange} A · 150 div
-            </div>
-          </div>
-          <StatusBadge
-            damaged={wmDamaged}
-            reversed={wmReversed}
-            overrange={wmOverrange}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--vml-text-muted)' }}>Dial reading</span>
-          <span className="font-mono font-bold tabular-nums">
-            {showNumericReadouts ? `${wmDialText} div` : '— div'}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--vml-text-muted)' }}>
-            Multiplying factor (MF)
-          </span>
-          <span className="font-mono font-semibold tabular-nums">
-            {wmMfText} W/div
-          </span>
-        </div>
-
+      {/* Generic Analog Meters */}
+      {analogMeters.length > 0 && (
         <div
-          className="flex items-center justify-between pt-1.5"
-          style={{ borderTop: '1px solid var(--vml-border)' }}
+          className="space-y-2 rounded-xl p-2.5"
+          style={{ border: '1px solid var(--vml-border)' }}
         >
-          <span style={{ color: 'var(--vml-text-muted)' }}>
-            Power (dial × MF)
-          </span>
-          <span
-            className="font-mono text-sm font-bold tabular-nums"
-            style={{ color: 'var(--vml-accent)' }}
-          >
-            {showNumericReadouts ? `${wmPowerText} W` : '— W'}
-          </span>
+          {analogMeters.map((m) => {
+            const dec = m.decimals ?? (m.kind === 'ammeter' ? 2 : 1);
+            const valText = m.damaged ? '0.0' : m.shownValue.toFixed(dec);
+            return (
+              <div key={m.id} className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="font-semibold">{m.label}</div>
+                  <div
+                    className="text-[10px]"
+                    style={{ color: 'var(--vml-text-muted)' }}
+                  >
+                    {m.id} · 0–{m.range} {m.unit}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <StatusBadge
+                    damaged={m.damaged}
+                    reversed={m.reversed}
+                    overrange={m.overrange}
+                  />
+                  <span className="font-mono text-sm font-bold tabular-nums">
+                    {showNumericReadouts ? `${valText} ${m.unit}` : `— ${m.unit}`}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      )}
+
+      {/* Generic Wattmeters */}
+      {wattmeters.map((wm) => {
+        const dialText = wm.damaged ? '0.0' : (wm.dial ?? 0).toFixed(1);
+        const mfText = (wm.mf ?? 1).toFixed(2);
+        const powerText = wm.damaged
+          ? '0.0'
+          : ((wm.dial ?? 0) * (wm.mf ?? 1)).toFixed(1);
+        const pfTag = wm.pf !== undefined && wm.pf < 0.99 ? ` · PF ${wm.pf}` : '';
+        return (
+          <div
+            key={wm.id}
+            className="space-y-1.5 rounded-xl p-2.5"
+            style={{ border: '1px solid var(--vml-border)' }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="font-semibold">{wm.label}</div>
+                <div
+                  className="text-[10px]"
+                  style={{ color: 'var(--vml-text-muted)' }}
+                >
+                  {wm.id} · {wm.vRange ?? 300} V / {wm.iRange ?? 10} A ·{' '}
+                  {wm.divisions ?? 150} div{pfTag}
+                </div>
+              </div>
+              <StatusBadge
+                damaged={wm.damaged}
+                reversed={wm.reversed}
+                overrange={wm.overrange}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span style={{ color: 'var(--vml-text-muted)' }}>Dial reading</span>
+              <span className="font-mono font-bold tabular-nums">
+                {showNumericReadouts ? `${dialText} div` : '— div'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span style={{ color: 'var(--vml-text-muted)' }}>
+                Multiplying factor (MF)
+              </span>
+              <span className="font-mono font-semibold tabular-nums">
+                {mfText} W/div
+              </span>
+            </div>
+
+            <div
+              className="flex items-center justify-between pt-1.5"
+              style={{ borderTop: '1px solid var(--vml-border)' }}
+            >
+              <span style={{ color: 'var(--vml-text-muted)' }}>
+                Power (dial × MF)
+              </span>
+              <span
+                className="font-mono text-sm font-bold tabular-nums"
+                style={{ color: 'var(--vml-accent)' }}
+              >
+                {showNumericReadouts ? `${powerText} W` : '— W'}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </section>
   );
 });
@@ -535,8 +585,9 @@ export function RightSidebar({
   experiment,
   controls,
   output,
-  primaryEnergised,
+  energised,
   controlsLocked = false,
+  unlockHint,
 }: RightSidebarProps) {
   const [activeTab, setActiveTab] = useState<SidebarTab>('bench');
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -544,6 +595,7 @@ export function RightSidebar({
   const netTapPointerTypeRef = useRef<string>('mouse');
 
   const mode = useSessionStore((s) => s.mode);
+  const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
   const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar);
   const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
@@ -555,39 +607,50 @@ export function RightSidebar({
   const setHighlightedNetIndex = useSessionStore((s) => s.setHighlightedNetIndex);
   const clearHighlightedNet = useSessionStore((s) => s.clearHighlightedNet);
 
-  const supplyOn = useControlsStore((s) => s.supplyOn);
+  const values = useControlsStore((s) => s.values);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
-  const variacV = useControlsStore((s) => s.variacV);
-  const wmVRange = useControlsStore((s) => s.wmVRange);
-  const wmIRange = useControlsStore((s) => s.wmIRange);
-  const lamps = useControlsStore((s) => s.lamps);
+  const supplyOn = isSupplySwitchOn(values);
+  const sessionSeed = useSessionStore((s) => s.sessionSeed);
+  const activeProbeLead = useSessionStore((s) => s.activeProbeLead);
+  const setActiveProbeLead = useSessionStore((s) => s.setActiveProbeLead);
+  const clearProbeLeads = useSessionStore((s) => s.clearProbeLeads);
+  const identifiedPairs = useSessionStore((s) => s.identifiedPairs);
+  const addIdentifiedPair = useSessionStore((s) => s.addIdentifiedPair);
+  const removeIdentifiedPair = useSessionStore((s) => s.removeIdentifiedPair);
+  const identifiedPhases = useSessionStore((s) => s.identifiedPhases);
+  const setIdentifiedPhases = useSessionStore((s) => s.setIdentifiedPhases);
+  const pendingDualReading = useSessionStore((s) => s.pendingDualReading);
+  const [phaseAssign, setPhaseAssign] = useState<Record<string, 'a' | 'b' | 'c'>>({});
+  const variacCtrl = controls.find((c) => c.kind === 'knob');
+  const variacV = variacCtrl ? Number(values[variacCtrl.id] ?? 0) : 0;
 
+  const stage = getStage(experiment, currentStageIndex);
   const isObserveMode = mode === 'observe';
-  const hasObservations = mode === 'self' || isObserveMode;
+  const hasObservations = mode === 'self' || isObserveMode || mode === 'learn';
   const currentTab: SidebarTab = hasObservations ? activeTab : 'bench';
+  const dualSpec = stage.twoReadingCapture;
+  const dualSig = dualSpec
+    ? dualSpec.invalidationControlIds.map((id) => String(values[id] ?? '')).join('|')
+    : '';
+  const dualReady =
+    !dualSpec ||
+    Boolean(
+      pendingDualReading &&
+        pendingDualReading.signature === dualSig &&
+        pendingDualReading.first &&
+        pendingDualReading.second,
+    );
   const canAddRow =
     hasObservations &&
     supplyOn &&
-    primaryEnergised &&
+    energised &&
+    dualReady &&
     observationRows.length < MAX_OBSERVATION_ROWS;
-
-  const { vp, vs, am, wm } = output.meters;
-
-  const vpText = vp.damaged ? '0.0' : vp.shownValue.toFixed(1);
-  const vsText = vs.damaged ? '0.0' : vs.shownValue.toFixed(1);
-  const amText = am.damaged ? '0.00' : am.shownValue.toFixed(2);
-  const wmDialText = wm.damaged ? '0.0' : wm.dial.toFixed(1);
-  const wmMfText = wm.mf.toFixed(2);
-  const wmPowerText = wm.damaged ? '0.0' : (wm.dial * wm.mf).toFixed(1);
 
   const dragStartY = useRef<number | null>(null);
 
   const handleAddRow = () => {
-    addObservationRow(
-      output,
-      { supplyOn, variacV, wmVRange, wmIRange, lamps },
-      primaryEnergised,
-    );
+    addObservationRow(output, values, energised);
   };
 
   const tabBar = hasObservations ? (
@@ -655,7 +718,7 @@ export function RightSidebar({
           color: 'var(--vml-text)',
         }}
       >
-        <span>Connections ({experiment.acceptedNetlists[0]?.length ?? 0} nets)</span>
+        <span>Connections ({stage.acceptedNetlists[0]?.length ?? 0} nets)</span>
         <span className="font-mono text-[11px]">
           {connectionsOpen ? '▾' : '▸'}
         </span>
@@ -667,10 +730,10 @@ export function RightSidebar({
             Hover on desktop or tap on touch to highlight a net on the bench.
           </p>
           {(() => {
-            const netlist = experiment.acceptedNetlists[0] ?? [];
-            const keys = experiment.netCategoryKeys ?? [];
-            const labels = experiment.netLabels ?? [];
-            const purposes = experiment.netPurposes ?? {};
+            const netlist = stage.acceptedNetlists[0] ?? [];
+            const keys = stage.netCategoryKeys ?? [];
+            const labels = stage.netLabels ?? [];
+            const purposes = stage.netPurposes ?? {};
             const orderedGroups: string[] = [];
             for (const k of keys) {
               if (!orderedGroups.includes(k)) orderedGroups.push(k);
@@ -770,34 +833,252 @@ export function RightSidebar({
     </section>
   ) : null;
 
+  const probeA = String(values['probe.a'] ?? '');
+  const probeB = String(values['probe.b'] ?? '');
+  const probeReading = output.meters.find((m) => m.id === 'probe');
+  const resolvedLabels = resolveScrambledTerminalLabels(
+    sessionSeed,
+    identifiedPairs,
+    identifiedPhases.length === 3,
+  );
+  const shortTerm = (id: string) =>
+    id ? (resolvedLabels[id] ?? id.replace(/^tx\./, '')) : '--';
+
+  const probeSection = stage.probeEnabled ? (
+    <section
+      className="space-y-2 rounded-xl p-2.5"
+      style={{
+        backgroundColor: 'var(--vml-panel-hover)',
+        border: '1px solid var(--vml-border)',
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold">Probe Voltmeter Leads</span>
+        <span
+          className="font-mono text-xs font-bold"
+          style={{ color: 'var(--vml-accent)' }}
+        >
+          {(probeReading?.shownValue ?? 0).toFixed(1)} V
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-1">
+        <button
+          type="button"
+          onClick={() => setActiveProbeLead(null)}
+          className="rounded-md px-1.5 py-1 text-[11px] font-semibold transition"
+          style={{
+            backgroundColor:
+              activeProbeLead === null ? 'var(--vml-accent)' : 'var(--vml-panel)',
+            color:
+              activeProbeLead === null
+                ? 'var(--vml-accent-text)'
+                : 'var(--vml-text)',
+            border: '1px solid var(--vml-border)',
+          }}
+        >
+          Wire Mode
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveProbeLead(activeProbeLead === 'a' ? null : 'a')}
+          className="rounded-md px-1.5 py-1 text-[11px] font-semibold transition"
+          style={{
+            backgroundColor:
+              activeProbeLead === 'a' ? '#ef4444' : 'var(--vml-panel)',
+            color: activeProbeLead === 'a' ? '#ffffff' : '#fca5a5',
+            border: '1px solid var(--vml-border)',
+          }}
+        >
+          + {shortTerm(probeA)}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveProbeLead(activeProbeLead === 'b' ? null : 'b')}
+          className="rounded-md px-1.5 py-1 text-[11px] font-semibold transition"
+          style={{
+            backgroundColor:
+              activeProbeLead === 'b' ? '#0284c7' : 'var(--vml-panel)',
+            color: activeProbeLead === 'b' ? '#ffffff' : '#7dd3fc',
+            border: '1px solid var(--vml-border)',
+          }}
+        >
+          - {shortTerm(probeB)}
+        </button>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px]" style={{ color: 'var(--vml-text-muted)' }}>
+          {activeProbeLead
+            ? `Click any secondary terminal in 3D to clip ${activeProbeLead === 'a' ? 'Red (+)' : 'Black (-)'} lead.`
+            : 'Select + or - lead to probe terminals without disconnecting wires.'}
+        </p>
+        {(probeA || probeB) && (
+          <button
+            type="button"
+            onClick={clearProbeLeads}
+            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+            style={{
+              backgroundColor: 'var(--vml-panel)',
+              border: '1px solid var(--vml-border)',
+            }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    </section>
+  ) : null;
+
+  const assignPairPhase = (pairKey: string, phase: 'a' | 'b' | 'c') => {
+    const next = { ...phaseAssign, [pairKey]: phase };
+    setPhaseAssign(next);
+    const groups: string[][] = (['a', 'b', 'c'] as const).map((ph) =>
+      identifiedPairs
+        .map((p) => canonicalPairKey(p[0], p[1]))
+        .filter((k) => next[k] === ph),
+    );
+    setIdentifiedPhases(groups);
+  };
+
+  const identificationSection = stage.identificationMode ? (
+    <section
+      className="space-y-2 rounded-xl p-2.5"
+      style={{
+        backgroundColor: 'var(--vml-panel-hover)',
+        border: '1px solid var(--vml-border)',
+      }}
+    >
+      {stage.identificationMode === 'winding-pairs' && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold">Winding Pairs (W1–W6)</span>
+            <span className="text-[11px] font-semibold text-emerald-400">
+              {identifiedPairs.length} / 6
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={!probeA || !probeB || probeA === probeB || identifiedPairs.length >= 6}
+            onClick={() => addIdentifiedPair(probeA, probeB)}
+            className="w-full rounded-lg px-2.5 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-45"
+            style={{
+              backgroundColor: 'var(--vml-accent)',
+              color: 'var(--vml-accent-text)',
+            }}
+          >
+            Pair probed terminals ({shortTerm(probeA)} · {shortTerm(probeB)})
+          </button>
+          {identifiedPairs.length > 0 && (
+            <div className="space-y-1">
+              {identifiedPairs.map(([a, b], idx) => (
+                <div
+                  key={canonicalPairKey(a, b)}
+                  className="flex items-center justify-between rounded-md px-2 py-1 text-[11px]"
+                  style={{
+                    backgroundColor: 'var(--vml-panel)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  <span className="font-mono font-semibold">
+                    W{idx + 1}: {a.replace(/^tx\./, '')} ↔ {b.replace(/^tx\./, '')}
+                  </span>
+                  {!isObserveMode && (
+                    <button
+                      type="button"
+                      onClick={() => removeIdentifiedPair(idx)}
+                      className="text-[11px] font-bold text-rose-400 hover:text-rose-300"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {stage.identificationMode === 'phase-groups' && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold">Group Phases (a, b, c)</span>
+            <span className="text-[10px]" style={{ color: 'var(--vml-text-muted)' }}>
+              2 pairs per phase
+            </span>
+          </div>
+          <p className="text-[10px]" style={{ color: 'var(--vml-text-muted)' }}>
+            Connect winding pairs in series on the bench: same-phase halves give 0 V (opposing) or ~115 V (aiding); different phases give ~57.5 V or ~99.6 V.
+          </p>
+          <div className="space-y-1">
+            {identifiedPairs.map(([a, b], idx) => {
+              const key = canonicalPairKey(a, b);
+              const assigned =
+                phaseAssign[key] ??
+                (identifiedPhases[0]?.includes(key)
+                  ? 'a'
+                  : identifiedPhases[1]?.includes(key)
+                    ? 'b'
+                    : identifiedPhases[2]?.includes(key)
+                      ? 'c'
+                      : undefined);
+              return (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-[11px]"
+                  style={{
+                    backgroundColor: 'var(--vml-panel)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  <span className="font-mono">
+                    W{idx + 1} ({a.replace(/^tx\./, '')}–{b.replace(/^tx\./, '')})
+                  </span>
+                  <div className="flex gap-1">
+                    {(['a', 'b', 'c'] as const).map((ph) => (
+                      <button
+                        key={ph}
+                        type="button"
+                        disabled={isObserveMode}
+                        onClick={() => assignPairPhase(key, ph)}
+                        className="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                        style={{
+                          backgroundColor:
+                            assigned === ph ? 'var(--vml-accent)' : 'transparent',
+                          color:
+                            assigned === ph
+                              ? 'var(--vml-accent-text)'
+                              : 'var(--vml-text-muted)',
+                          border: '1px solid var(--vml-border)',
+                        }}
+                      >
+                        {ph}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </section>
+  ) : null;
+
   const benchTabBody = (
     <div className="space-y-4">
-      <ControlsSection controls={controls} controlsLocked={controlsLocked} />
+      <ControlsSection
+        controls={controls}
+        controlsLocked={controlsLocked}
+        unlockHint={unlockHint}
+      />
+      {probeSection}
+      {identificationSection}
       <div style={{ borderTop: '1px solid var(--vml-border)' }} className="pt-3.5">
         <ReadingsSection
-          vpText={vpText}
-          vpOverrange={vp.overrange}
-          vpDamaged={vp.damaged}
-          vsText={vsText}
-          vsOverrange={vs.overrange}
-          vsDamaged={vs.damaged}
-          amText={amText}
-          amOverrange={am.overrange}
-          amDamaged={am.damaged}
-          wmDialText={wmDialText}
-          wmMfText={wmMfText}
-          wmPowerText={wmPowerText}
-          wmOverrange={wm.overrange}
-          wmDamaged={wm.damaged}
-          wmReversed={wm.reversed}
-          wmVRange={wmVRange}
-          wmIRange={wmIRange}
-          vpRange={vp.range}
-          vsRange={vs.range}
-          amRange={am.range}
+          meters={output.meters}
           supplyOn={supplyOn}
           mcbTripped={mcbTripped}
           variacV={variacV}
+          hasVariac={Boolean(variacCtrl)}
           showNumericReadouts={showNumericReadouts}
           onToggleNumericReadouts={toggleNumericReadouts}
         />
@@ -810,46 +1091,56 @@ export function RightSidebar({
     <ObservationsPanel
       experiment={experiment}
       output={output}
-      controls={{ supplyOn, variacV, wmVRange, wmIRange, lamps }}
-      primaryEnergised={primaryEnergised}
+      controls={values}
+      energised={energised}
     />
   );
 
   const stickyAddRowBar =
     hasObservations && currentTab === 'bench' ? (
       <div
-        className="flex shrink-0 items-center justify-between gap-2 px-3.5 py-2.5"
+        className="flex shrink-0 flex-col gap-2 px-3.5 py-2.5"
         style={{
           borderTop: '1px solid var(--vml-border)',
           backgroundColor: 'var(--vml-panel)',
         }}
       >
-        <button
-          type="button"
-          disabled={!canAddRow}
-          onClick={handleAddRow}
-          className="flex-1 rounded-lg px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-45"
-          style={{
-            backgroundColor: 'var(--vml-accent)',
-            color: 'var(--vml-accent-text)',
-          }}
-        >
-          + Add row
-        </button>
-        <span
-          className="font-mono text-xs font-semibold tabular-nums"
-          style={{ color: 'var(--vml-text-muted)' }}
-        >
-          {observationRows.length}/{MAX_OBSERVATION_ROWS}
-        </span>
+        <TwoReadingCaptureBar
+          stage={stage}
+          output={output}
+          values={values}
+          supplyOn={supplyOn}
+          energised={energised}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            disabled={!canAddRow}
+            onClick={handleAddRow}
+            className="flex-1 rounded-lg px-3 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-45"
+            style={{
+              backgroundColor: 'var(--vml-accent)',
+              color: 'var(--vml-accent-text)',
+            }}
+          >
+            + Add row
+          </button>
+          <span
+            className="font-mono text-xs font-semibold tabular-nums"
+            style={{ color: 'var(--vml-text-muted)' }}
+          >
+            {observationRows.length}/{MAX_OBSERVATION_ROWS}
+          </span>
+        </div>
       </div>
     ) : null;
 
+  const peekMeters = output.meters.slice(0, 3);
+
   return (
     <>
-      {/* Desktop right sidebar (pushes/resizes canvas without overlay) */}
+      {/* Desktop right sidebar */}
       <div className="relative hidden h-full shrink-0 md:flex">
-        {/* Edge arrow tab */}
         <button
           type="button"
           onClick={toggleSidebar}
@@ -897,7 +1188,6 @@ export function RightSidebar({
           transform: sidebarOpen ? 'translateY(0)' : 'translateY(100%)',
         }}
       >
-        {/* Drag handle & peek bar */}
         <div
           className="cursor-grab px-3 pt-2 pb-2 active:cursor-grabbing"
           style={{ touchAction: 'none' }}
@@ -919,18 +1209,24 @@ export function RightSidebar({
         >
           <div className="mx-auto mb-1.5 h-1 w-10 rounded-full bg-slate-400/60" />
           <div className="flex items-center justify-between gap-1.5 font-mono text-[11px] tabular-nums">
-            <span>
-              V1:<strong>{showNumericReadouts ? `${vpText}V` : '—'}</strong>
-            </span>
-            <span>
-              V2:<strong>{showNumericReadouts ? `${vsText}V` : '—'}</strong>
-            </span>
-            <span>
-              WM:
-              <strong style={{ color: 'var(--vml-accent)' }}>
-                {showNumericReadouts ? `${wmPowerText}W` : '—'}
-              </strong>
-            </span>
+            {peekMeters.map((m) => {
+              const dec = m.decimals ?? (m.kind === 'ammeter' ? 2 : 1);
+              const valStr = m.damaged ? 'DMG' : `${m.shownValue.toFixed(dec)}${m.unit}`;
+              return (
+                <span key={m.id}>
+                  {m.id.toUpperCase()}:
+                  <strong
+                    style={
+                      m.kind === 'wattmeter'
+                        ? { color: 'var(--vml-accent)' }
+                        : undefined
+                    }
+                  >
+                    {showNumericReadouts ? valStr : '—'}
+                  </strong>
+                </span>
+              );
+            })}
             <div className="flex items-center gap-1">
               {hasObservations && (
                 <button

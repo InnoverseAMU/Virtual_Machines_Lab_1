@@ -7,6 +7,7 @@ import { Terminal } from './Terminal';
 
 interface AcSupplyProps {
   instance: ComponentInstance;
+  controlId?: string;
   supplyOn: boolean;
   mcbTripped: boolean;
   controlsLocked?: boolean;
@@ -14,12 +15,13 @@ interface AcSupplyProps {
 
 export function AcSupply({
   instance,
+  controlId = 'sup.switch',
   supplyOn,
   mcbTripped,
   controlsLocked = false,
 }: AcSupplyProps) {
   const def = getComponentDef(instance.type);
-  const toggleSupply = useControlsStore((s) => s.toggleSupply);
+  const setControlValue = useControlsStore((s) => s.setControlValue);
   const [hovered, setHovered] = useState(false);
 
   const subtext = mcbTripped
@@ -27,6 +29,8 @@ export function AcSupply({
     : supplyOn
       ? 'MCB: ON'
       : 'MCB: OFF';
+
+  const vRating = Number(instance.params.V ?? 230);
 
   return (
     <group position={instance.position}>
@@ -49,7 +53,7 @@ export function AcSupply({
           onClick={(e) => {
             e.stopPropagation();
             if (controlsLocked) return;
-            toggleSupply();
+            setControlValue(controlId, !supplyOn);
           }}
           onPointerOver={(e) => {
             e.stopPropagation();
@@ -99,7 +103,7 @@ export function AcSupply({
       </mesh>
 
       <LabelPlate
-        text="230 V AC SUPPLY"
+        text={`${vRating} V AC SUPPLY`}
         subtext={subtext}
         width={0.76}
         height={0.16}

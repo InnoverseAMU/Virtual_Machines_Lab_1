@@ -1,22 +1,35 @@
+import { findMeterReading, isSupplySwitchOn } from '../core/physics/evaluate';
+import { resolveScrambledTerminalLabels } from '../core/phasor/ex3_5Scramble';
 import type {
+  BaseConnectionState,
   ComponentInstance,
-  ConnectionState,
   ControlDef,
-  TransformerLoadOutput,
+  PhysicsSolveOutput,
 } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
+import { useSessionStore } from '../stores/sessionStore';
 import { AcSupply } from './AcSupply';
+import { AcSupply3ph } from './AcSupply3ph';
 import { AnalogMeter } from './AnalogMeter';
+import { CurrentTransformer } from './CurrentTransformer';
+import { DcSupply } from './DcSupply';
+import { InductionMotor3ph } from './InductionMotor3ph';
 import { LampBank } from './LampBank';
+import { PotDivider } from './PotDivider';
+import { ProbeVoltmeter } from './ProbeVoltmeter';
+import { Rheostat } from './Rheostat';
+import { SelectorSwitch } from './SelectorSwitch';
 import { Transformer } from './Transformer';
+import { Transformer3ph } from './Transformer3ph';
 import { Variac } from './Variac';
+import { Variac3ph } from './Variac3ph';
 import { Wattmeter } from './Wattmeter';
 
 interface ComponentRendererProps {
   instance: ComponentInstance;
   controlsDef: ControlDef[];
-  labOutput?: TransformerLoadOutput;
-  connectionState?: ConnectionState;
+  labOutput?: PhysicsSolveOutput;
+  connectionState?: BaseConnectionState;
   controlsLocked?: boolean;
 }
 
@@ -27,87 +40,327 @@ export function ComponentRenderer({
   connectionState,
   controlsLocked = false,
 }: ComponentRendererProps) {
-  const supplyOn = useControlsStore((s) => s.supplyOn);
+  const values = useControlsStore((s) => s.values);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
-  const variacV = useControlsStore((s) => s.variacV);
-  const wmVRange = useControlsStore((s) => s.wmVRange);
-  const wmIRange = useControlsStore((s) => s.wmIRange);
   const lampStates = useControlsStore((s) => s.lampStates);
+  const sessionSeed = useSessionStore((s) => s.sessionSeed);
+  const identifiedPairs = useSessionStore((s) => s.identifiedPairs);
+  const identifiedPhases = useSessionStore((s) => s.identifiedPhases);
 
   switch (instance.type) {
-    case 'acSupply':
+    case 'acSupply': {
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const swId = swDef?.id ?? 'sup.switch';
+      const supplyOn = Boolean(values[swId]);
       return (
         <AcSupply
           instance={instance}
+          controlId={swId}
           supplyOn={supplyOn}
           mcbTripped={mcbTripped}
           controlsLocked={controlsLocked}
         />
       );
+    }
+    case 'acSupply3ph': {
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const swId = swDef?.id ?? 'sup3.switch';
+      const supplyOn = Boolean(values[swId]);
+      return (
+        <AcSupply3ph
+          instance={instance}
+          controlId={swId}
+          supplyOn={supplyOn}
+          mcbTripped={mcbTripped}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
     case 'variac1ph': {
       const knobDef = controlsDef.find(
         (c) => c.componentId === instance.id && c.kind === 'knob',
       );
+      const controlId = knobDef?.id ?? `${instance.id}.knob`;
       const minV = knobDef?.kind === 'knob' ? knobDef.min : 0;
       const maxV = knobDef?.kind === 'knob' ? knobDef.max : 270;
       const stepV = knobDef?.kind === 'knob' ? knobDef.step : 1;
+      const fineStepV =
+        knobDef?.kind === 'knob' ? (knobDef.fineStep ?? 0.1) : 0.1;
+      const variacV = Number(values[controlId] ?? 0);
       return (
         <Variac
           instance={instance}
+          controlId={controlId}
           variacV={variacV}
           minV={minV}
           maxV={maxV}
           stepV={stepV}
+          fineStepV={fineStepV}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'variac3ph': {
+      const knobDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const controlId = knobDef?.id ?? `${instance.id}.knob`;
+      const minV = knobDef?.kind === 'knob' ? knobDef.min : 0;
+      const maxV = knobDef?.kind === 'knob' ? knobDef.max : 270;
+      const stepV = knobDef?.kind === 'knob' ? knobDef.step : 1;
+      const fineStepV =
+        knobDef?.kind === 'knob' ? (knobDef.fineStep ?? 0.1) : 0.1;
+      const variacV = Number(values[controlId] ?? 0);
+      return (
+        <Variac3ph
+          instance={instance}
+          controlId={controlId}
+          variacV={variacV}
+          minV={minV}
+          maxV={maxV}
+          stepV={stepV}
+          fineStepV={fineStepV}
           controlsLocked={controlsLocked}
         />
       );
     }
     case 'wattmeter': {
       const vDef = controlsDef.find(
-        (c) => c.id === 'wm.vRange' && c.kind === 'selector',
+        (c) => c.id === `${instance.id}.vRange` && c.kind === 'selector',
       );
       const iDef = controlsDef.find(
-        (c) => c.id === 'wm.iRange' && c.kind === 'selector',
+        (c) => c.id === `${instance.id}.iRange` && c.kind === 'selector',
       );
-      const vOptions = vDef?.kind === 'selector' ? vDef.options : [150, 300];
-      const iOptions = iDef?.kind === 'selector' ? iDef.options : [2.5, 5, 10];
+      const revDef = controlsDef.find(
+        (c) => c.id === `${instance.id}.reverse` && c.kind === 'switch',
+      );
+
+      const paramVRanges = Array.isArray(instance.params.vRanges)
+        ? (instance.params.vRanges as number[])
+        : [Number(instance.params.vRange ?? 300)];
+      const paramIRanges = Array.isArray(instance.params.iRanges)
+        ? (instance.params.iRanges as number[])
+        : [Number(instance.params.iRange ?? 10)];
+
+      const vOptions =
+        vDef?.kind === 'selector'
+          ? vDef.options.map(Number)
+          : paramVRanges;
+      const iOptions =
+        iDef?.kind === 'selector'
+          ? iDef.options.map(Number)
+          : paramIRanges;
+      const vRange = Number(
+        values[`${instance.id}.vRange`] ??
+          instance.params.vRange ??
+          vOptions[0] ??
+          300,
+      );
+      const iRange = Number(
+        values[`${instance.id}.iRange`] ??
+          instance.params.iRange ??
+          iOptions[0] ??
+          10,
+      );
+      const divisions = Number(instance.params.divisions ?? 150);
+      const pf = Number(instance.params.pf ?? 1.0);
+      const reverseOn = revDef ? Boolean(values[revDef.id]) : false;
+
       return (
         <Wattmeter
           instance={instance}
-          reading={labOutput?.meters.wm}
-          vRange={wmVRange}
-          iRange={wmIRange}
+          reading={findMeterReading(labOutput, instance.id)}
+          vRange={vRange}
+          iRange={iRange}
+          divisions={divisions}
+          pf={pf}
           vOptions={vOptions}
           iOptions={iOptions}
+          hasVSelector={Boolean(vDef)}
+          hasISelector={Boolean(iDef)}
+          hasReverseSwitch={Boolean(revDef)}
+          reverseOn={reverseOn}
           controlsLocked={controlsLocked}
         />
       );
     }
     case 'transformer1ph':
+    case 'transformerCenterTap':
+    case 'transformerTeaser':
       return <Transformer instance={instance} />;
-    case 'voltmeter':
-      return (
-        <AnalogMeter
-          instance={instance}
-          reading={
-            instance.id === 'vp'
-              ? labOutput?.meters.vp
-              : labOutput?.meters.vs
-          }
-        />
+    case 'transformer3phTrue':
+      return <Transformer3ph instance={instance} />;
+    case 'transformer3ph': {
+      const labelMap = resolveScrambledTerminalLabels(
+        sessionSeed,
+        identifiedPairs,
+        identifiedPhases.length === 3,
       );
-    case 'ammeter':
-      return <AnalogMeter instance={instance} reading={labOutput?.meters.am} />;
-    case 'lampLoad':
+      return <Transformer3ph instance={instance} terminalLabelMap={labelMap} />;
+    }
+    case 'probeVoltmeter':
       return (
-        <LampBank
+        <ProbeVoltmeter
           instance={instance}
-          lampStates={lampStates}
-          supplyOn={supplyOn}
-          loadConnected={connectionState?.loadConnected ?? false}
-          v2={labOutput?.V2 ?? 0}
+          reading={findMeterReading(labOutput, instance.id)}
           controlsLocked={controlsLocked}
         />
       );
+    case 'inductionMotor3ph': {
+      const loadDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const lockDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const loadF = loadDef ? Number(values[loadDef.id] ?? 0) : 0;
+      const rotorBlocked = lockDef ? Boolean(values[lockDef.id]) : false;
+      const rpm = labOutput?.outputs?.n ?? 0;
+      const t1 = labOutput?.outputs?.T1 ?? 1.0 + 1.556 * loadF;
+      const t2 = labOutput?.outputs?.T2 ?? 1.0 + 0.556 * loadF;
+      return (
+        <InductionMotor3ph
+          instance={instance}
+          rpm={rpm}
+          t1Kgf={t1}
+          t2Kgf={t2}
+          loadF={loadF}
+          rotorBlocked={rotorBlocked}
+        />
+      );
+    }
+    case 'dcSupply': {
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const swId = swDef?.id ?? 'dcSupply.switch';
+      return (
+        <DcSupply
+          instance={instance}
+          controlId={swId}
+          supplyOn={Boolean(values[swId])}
+          mcbTripped={mcbTripped}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'potDivider': {
+      const pDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const pId = pDef?.id ?? 'pot.p';
+      return (
+        <PotDivider
+          instance={instance}
+          controlId={pId}
+          p={Number(values[pId] ?? 0)}
+          damaged={Boolean(labOutput?.outputs?.potDamaged)}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'currentTransformer':
+      return <CurrentTransformer instance={instance} />;
+    case 'selectorSwitch': {
+      const selDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'selector',
+      );
+      const ctrlId = selDef?.id ?? `${instance.id}.pos`;
+      const posVal = String(values[ctrlId] ?? 'B');
+      const opts =
+        selDef?.kind === 'selector' ? selDef.options.map(String) : ['B', 'C'];
+      return (
+        <SelectorSwitch
+          instance={instance}
+          controlId={ctrlId}
+          positionVal={posVal}
+          options={opts}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'voltmeter':
+    case 'ammeter': {
+      const rangeDef = controlsDef.find(
+        (c) => c.id === `${instance.id}.range` && c.kind === 'selector',
+      );
+      const revDef = controlsDef.find(
+        (c) => c.id === `${instance.id}.reverse` && c.kind === 'switch',
+      );
+      const rangeOptions =
+        rangeDef?.kind === 'selector'
+          ? rangeDef.options.map(Number)
+          : Array.isArray(instance.params.ranges)
+            ? (instance.params.ranges as number[])
+            : undefined;
+      const activeRange =
+        rangeDef && values[rangeDef.id] !== undefined
+          ? Number(values[rangeDef.id])
+          : undefined;
+      const reverseOn = revDef ? Boolean(values[revDef.id]) : false;
+      return (
+        <AnalogMeter
+          instance={instance}
+          reading={findMeterReading(labOutput, instance.id)}
+          activeRange={activeRange}
+          rangeOptions={rangeOptions}
+          hasReverseSwitch={Boolean(revDef)}
+          reverseOn={reverseOn}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'lampLoad': {
+      const stepsDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'steps',
+      );
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const swSupply =
+        isSupplySwitchOn(values) && (swDef ? Boolean(values[swDef.id]) : true);
+      return (
+        <LampBank
+          instance={instance}
+          stepsControlId={stepsDef?.id ?? `${instance.id}.lamps`}
+          lampStates={lampStates}
+          supplyOn={swSupply}
+          loadConnected={Boolean(connectionState?.loadConnected)}
+          v2={labOutput?.outputs?.VL ?? labOutput?.outputs?.V2 ?? 0}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'rheostat': {
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const rDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const swId = swDef?.id ?? `${instance.id}.switch`;
+      const rId = rDef?.id ?? `${instance.id}.R`;
+      const minR = rDef?.kind === 'knob' ? rDef.min : 3;
+      const maxR = rDef?.kind === 'knob' ? rDef.max : 100;
+      const stepR = rDef?.kind === 'knob' ? rDef.step : 0.5;
+      const defaultR = rDef?.kind === 'knob' ? rDef.defaultValue : 100;
+      return (
+        <Rheostat
+          instance={instance}
+          switchControlId={swId}
+          resistanceControlId={rId}
+          switchOn={Boolean(values[swId])}
+          resistance={Number(values[rId] ?? defaultR)}
+          minR={minR}
+          maxR={maxR}
+          stepR={stepR}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
   }
 }
