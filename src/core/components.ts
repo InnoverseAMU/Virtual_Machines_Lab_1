@@ -1,4 +1,10 @@
-import type { ComponentType, ComponentTypeDef, TerminalId } from './types';
+import type {
+  ComponentInstance,
+  ComponentType,
+  ComponentTypeDef,
+  ControlValues,
+  TerminalId,
+} from './types';
 
 export const COMPONENT_DEFS: Record<ComponentType, ComponentTypeDef> = {
   acSupply: {
@@ -69,4 +75,20 @@ export function getTerminalDef(type: ComponentType, terminalName: string) {
 
 export function getComponentTerminalIds(componentId: string, type: ComponentType): TerminalId[] {
   return COMPONENT_DEFS[type].terminals.map((t) => `${componentId}.${t.name}`);
+}
+
+/**
+ * Resolves a component's internal links, supporting both static link arrays
+ * and dynamic functions of control state (e.g. range/selector plugs).
+ */
+export function resolveComponentInternalLinks(
+  def: ComponentTypeDef,
+  instance: ComponentInstance,
+  controls: ControlValues = {},
+): [string, string][] {
+  if (!def.internalLinks) return [];
+  if (typeof def.internalLinks === 'function') {
+    return def.internalLinks(controls, instance);
+  }
+  return def.internalLinks;
 }

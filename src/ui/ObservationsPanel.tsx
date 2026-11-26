@@ -1,104 +1,113 @@
+import { getStage } from '../core/circuit/stages';
 import {
-  computeRowEfficiency,
-  evaluateRunPrerequisites,
+  evaluateColumnValue,
+  evaluateRowRules,
+  evaluateStagePrerequisites,
+  getRowValue,
   MAX_OBSERVATION_ROWS,
 } from '../core/physics/report';
 import type {
+  ColumnDef,
+  ControlValues,
   ExperimentDef,
-  TransformerLoadControls,
-  TransformerLoadOutput,
+  ObservationCellValue,
+  PhysicsSolveOutput,
 } from '../core/types';
 import { useSessionStore } from '../stores/sessionStore';
-import { EfficiencyChart } from './EfficiencyChart';
+import { ObservationChart } from './ObservationChart';
 
 interface ObservationsPanelProps {
   experiment: ExperimentDef;
-  output: TransformerLoadOutput;
-  controls: TransformerLoadControls;
-  primaryEnergised: boolean;
+  output: PhysicsSolveOutput;
+  controls: ControlValues;
+  energised: boolean;
+}
+
+function formatCellValue(
+  col: ColumnDef,
+  val: ObservationCellValue,
+): string {
+  if (val === null || val === undefined) {
+    return col.placeholder ?? '—';
+  }
+  if (typeof val === 'number') {
+    const dec = col.displayDecimals ?? col.decimals;
+    return dec !== undefined ? val.toFixed(dec) : String(val);
+  }
+  return String(val);
 }
 
 export function ObservationsPanel({
   experiment,
   output,
   controls,
-  primaryEnergised,
+  energised,
 }: ObservationsPanelProps) {
   const mode = useSessionStore((s) => s.mode);
+  const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
   const observationRows = useSessionStore((s) => s.observationRows);
-  const runRegulationInput = useSessionStore((s) => s.runRegulationInput);
-  const runMaxEffLoadInput = useSessionStore((s) => s.runMaxEffLoadInput);
+  const runAnswerInputs = useSessionStore((s) => s.runAnswerInputs);
   const runCheckResult = useSessionStore((s) => s.runCheckResult);
   const attempts = useSessionStore((s) => s.attempts);
   const hintLevel = useSessionStore((s) => s.hintLevel);
   const usedSolutionInRun = useSessionStore((s) => s.usedSolutionInRun);
-
-  const isObserveMode = mode === 'observe';
   const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
 
   const addObservationRow = useSessionStore((s) => s.addObservationRow);
   const deleteObservationRow = useSessionStore((s) => s.deleteObservationRow);
   const clearObservationRows = useSessionStore((s) => s.clearObservationRows);
-  const setRunRegulationInput = useSessionStore((s) => s.setRunRegulationInput);
-  const setRunMaxEffLoadInput = useSessionStore((s) => s.setRunMaxEffLoadInput);
+  const setRunAnswerInput = useSessionStore((s) => s.setRunAnswerInput);
   const submitRunAnswers = useSessionStore((s) => s.submitRunAnswers);
   const clearRunCheckResult = useSessionStore((s) => s.clearRunCheckResult);
 
+  const isObserveMode = mode === 'observe';
+  const stage = getStage(experiment, currentStageIndex);
+  const supplyOn = Boolean(controls['sup.switch']);
   const canAddRow =
-    controls.supplyOn &&
-    primaryEnergised &&
-    observationRows.length < MAX_OBSERVATION_ROWS;
+    supplyOn && energised && observationRows.length < MAX_OBSERVATION_ROWS;
 
-  const prereqs = evaluateRunPrerequisites(observationRows);
-  const { vp, vs, am, wm } = output.meters;
-
-  const v1Live = vp.damaged ? '0.0' : vp.shownValue.toFixed(1);
-  const v2Live = vs.damaged ? '0.0' : vs.shownValue.toFixed(1);
-  const i2Live = am.damaged ? '0.00' : am.shownValue.toFixed(2);
-  const p1Live = wm.damaged ? '0.0' : (wm.dial * wm.mf).toFixed(1);
+  const visibleColumns = stage.observationTable.filter((c) => !c.hidden);
+  const prereqs = evaluateStagePrerequisites(stage, observationRows);
+  const charts = stage.charts ?? experiment.charts ?? [];
 
   return (
     <div className="space-y-3 text-xs">
-      {/* Compact live reading strip */}
+      {/* Compact generic live reading strip */}
       <div
-        className="grid grid-cols-4 gap-1 rounded-xl px-2 py-1.5 text-center font-mono text-[11px] tabular-nums"
+        className="grid gap-1 rounded-xl px-2 py-1.5 text-center font-mono text-[11px] tabular-nums"
         style={{
+          gridTemplateColumns: `repeat(${Math.min(4, Math.max(1, output.meters.length))}, minmax(0, 1fr))`,
           backgroundColor: 'var(--vml-panel-hover)',
           border: '1px solid var(--vml-border)',
         }}
       >
-        <div>
-          <div className="text-[9px]" style={{ color: 'var(--vml-text-muted)' }}>
-            V1
-          </div>
-          <div className="font-bold">
-            {showNumericReadouts ? `${v1Live}V` : '—'}
-          </div>
-        </div>
-        <div>
-          <div className="text-[9px]" style={{ color: 'var(--vml-text-muted)' }}>
-            V2
-          </div>
-          <div className="font-bold">
-            {showNumericReadouts ? `${v2Live}V` : '—'}
-          </div>
-        </div>
-        <div>
-          <div className="text-[9px]" style={{ color: 'var(--vml-text-muted)' }}>
-            I2
-          </div>
-          <div className="font-bold">
-            {showNumericReadouts ? `${i2Live}A` : '—'}
-          </div>
-        </div>
-        <div>
-          <div className="text-[9px]" style={{ color: 'var(--vml-text-muted)' }}>
-            P1
-          </div>
-          <div className="font-bold" style={{ color: 'var(--vml-accent)' }}>
-            {showNumericReadouts ? `${p1Live}W` : '—'}
-          </div>
-        </div>
+        {output.meters.map((meter) => {
+          const dec = meter.decimals ?? (meter.kind === 'ammeter' ? 2 : 1);
+          const text = meter.damaged
+            ? 'DMG'
+            : `${meter.shownValue.toFixed(dec)}${meter.unit}`;
+          return (
+            <div key={meter.id}>
+              <div
+                className="truncate text-[9px]"
+                style={{ color: 'var(--vml-text-muted)' }}
+                title={meter.label}
+              >
+                {meter.id.toUpperCase()}
+              </div>
+              <div
+                className="font-bold"
+                style={
+                  meter.kind === 'wattmeter'
+                    ? { color: 'var(--vml-accent)' }
+                    : undefined
+                }
+              >
+                {showNumericReadouts ? text : '—'}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Add row & Clear actions */}
@@ -106,7 +115,7 @@ export function ObservationsPanel({
         <button
           type="button"
           disabled={!canAddRow}
-          onClick={() => addObservationRow(output, controls, primaryEnergised)}
+          onClick={() => addObservationRow(output, controls, energised)}
           className="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-45"
           style={{
             backgroundColor: 'var(--vml-accent)',
@@ -131,13 +140,13 @@ export function ObservationsPanel({
         )}
       </div>
 
-      {!controls.supplyOn || !primaryEnergised ? (
+      {!supplyOn || !energised ? (
         <p className="text-[11px]" style={{ color: 'var(--vml-text-muted)' }}>
-          Energise the primary circuit (Supply ON) to capture observation rows.
+          Energise the circuit (Supply ON) to capture observation rows.
         </p>
       ) : null}
 
-      {/* Read-only observation table */}
+      {/* Schema-driven read-only observation table */}
       <div
         className="overflow-x-auto rounded-xl"
         style={{ border: '1px solid var(--vml-border)' }}
@@ -150,14 +159,17 @@ export function ObservationsPanel({
                 color: 'var(--vml-text-muted)',
               }}
             >
-              <th className="px-1.5 py-1.5 text-left font-sans">#</th>
-              <th className="px-1 py-1.5">V1</th>
-              <th className="px-1 py-1.5">I2</th>
-              <th className="px-1 py-1.5">V2</th>
-              <th className="px-1 py-1.5">Dial</th>
-              <th className="px-1 py-1.5">MF</th>
-              <th className="px-1 py-1.5">P1</th>
-              <th className="px-1 py-1.5">η%</th>
+              {visibleColumns.map((col, idx) => (
+                <th
+                  key={col.id}
+                  className={`px-1 py-1.5 ${
+                    idx === 0 ? 'px-1.5 text-left font-sans' : ''
+                  }`}
+                  title={col.unit ? `${col.label} (${col.unit})` : col.label}
+                >
+                  {col.shortLabel ?? col.label}
+                </th>
+              ))}
               <th className="px-1 py-1.5" aria-label="Delete row" />
             </tr>
           </thead>
@@ -165,45 +177,51 @@ export function ObservationsPanel({
             {observationRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={visibleColumns.length + 1}
                   className="px-2 py-3 text-center font-sans text-[11px]"
                   style={{ color: 'var(--vml-text-muted)' }}
                 >
-                  No observations yet. Hold V1 = 230 V and click Add row.
+                  No observations yet. Adjust controls and click Add row.
                 </td>
               </tr>
             ) : (
               observationRows.map((row) => {
-                const eff = computeRowEfficiency(row);
+                const violations = evaluateRowRules(stage, row);
+                const isAmber = violations.some((v) => v.amber);
+                const highlightedCols = new Set(
+                  violations.flatMap((v) => v.highlightColumnIds),
+                );
+                const rowTooltip = violations.map((v) => v.message).join(' ');
+
                 return (
                   <tr
                     key={row.id}
-                    className={row.v1OutOfRange ? 'bg-amber-500/20' : ''}
+                    className={isAmber ? 'bg-amber-500/20' : ''}
                     style={{ borderTop: '1px solid var(--vml-border)' }}
-                    title={
-                      row.v1OutOfRange
-                        ? 'V1 was outside 230 ± 2 V when recorded'
-                        : undefined
-                    }
+                    title={rowTooltip || undefined}
                   >
-                    <td className="px-1.5 py-1 text-left font-bold">
-                      {row.sno}
-                    </td>
-                    <td
-                      className={`px-1 py-1 ${
-                        row.v1OutOfRange ? 'font-bold text-amber-400' : ''
-                      }`}
-                    >
-                      {row.v1.toFixed(1)}
-                    </td>
-                    <td className="px-1 py-1">{row.i2.toFixed(2)}</td>
-                    <td className="px-1 py-1">{row.v2.toFixed(1)}</td>
-                    <td className="px-1 py-1">{row.dial.toFixed(1)}</td>
-                    <td className="px-1 py-1">{row.mf.toFixed(1)}</td>
-                    <td className="px-1 py-1">{row.p1.toFixed(0)}</td>
-                    <td className="px-1 py-1">
-                      {row.i2 > 0 ? eff.toFixed(1) : '—'}
-                    </td>
+                    {visibleColumns.map((col, idx) => {
+                      const val =
+                        col.source.kind === 'derived'
+                          ? evaluateColumnValue(
+                              col,
+                              row.values,
+                              stage.physicsParams,
+                            )
+                          : getRowValue(row, col.id);
+                      const isColAmber =
+                        isAmber && highlightedCols.has(col.id);
+                      return (
+                        <td
+                          key={col.id}
+                          className={`px-1 py-1 ${
+                            idx === 0 ? 'px-1.5 text-left font-bold' : ''
+                          } ${isColAmber ? 'font-bold text-amber-400' : ''}`}
+                        >
+                          {formatCellValue(col, val)}
+                        </td>
+                      );
+                    })}
                     <td className="px-1 py-1 text-center">
                       <button
                         type="button"
@@ -222,93 +240,101 @@ export function ObservationsPanel({
         </table>
       </div>
 
-      {/* Prerequisites checklist */}
-      <div
-        className="space-y-1 rounded-xl p-2.5 text-[11px]"
-        style={{ border: '1px solid var(--vml-border)' }}
-      >
-        <div className="font-semibold">Report prerequisites</div>
-        <div className={prereqs.hasNoLoadRow ? 'text-emerald-400' : ''}>
-          {prereqs.hasNoLoadRow ? '✓' : '○'} No-load row (I2 = 0 A)
-        </div>
-        <div className={prereqs.hasRatedRow ? 'text-emerald-400' : ''}>
-          {prereqs.hasRatedRow ? '✓' : '○'} Near-rated row (I2 between 15 and 19 A)
-        </div>
-        <div className={prereqs.hasMinRows ? 'text-emerald-400' : ''}>
-          {prereqs.hasMinRows ? '✓' : '○'} At least 6 rows ({prereqs.rowCount}/6)
-        </div>
-      </div>
-
-      {/* SVG Efficiency vs Load VA chart */}
-      <EfficiencyChart rows={observationRows} />
-
-      {/* Student report answers */}
-      <div
-        className="space-y-2.5 rounded-xl p-2.5"
-        style={{ border: '1px solid var(--vml-border)' }}
-      >
-        <div className="font-semibold">Your calculated report</div>
-
-        <div className="space-y-1">
-          <label
-            htmlFor="ans-reg"
-            className="block text-[11px]"
-            style={{ color: 'var(--vml-text-muted)' }}
-          >
-            Voltage regulation (%)
-          </label>
-          <input
-            id="ans-reg"
-            type="number"
-            step="0.01"
-            placeholder="e.g. 2.32"
-            value={runRegulationInput}
-            onChange={(e) => setRunRegulationInput(e.target.value)}
-            className="w-full rounded-lg px-2.5 py-1.5 font-mono text-xs"
-            style={{
-              backgroundColor: 'var(--vml-panel-hover)',
-              border: '1px solid var(--vml-border)',
-              color: 'var(--vml-text)',
-            }}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label
-            htmlFor="ans-maxeff"
-            className="block text-[11px]"
-            style={{ color: 'var(--vml-text-muted)' }}
-          >
-            Load at max efficiency (% of rated 2 kVA)
-          </label>
-          <input
-            id="ans-maxeff"
-            type="number"
-            step="0.1"
-            placeholder="e.g. 66"
-            value={runMaxEffLoadInput}
-            onChange={(e) => setRunMaxEffLoadInput(e.target.value)}
-            className="w-full rounded-lg px-2.5 py-1.5 font-mono text-xs"
-            style={{
-              backgroundColor: 'var(--vml-panel-hover)',
-              border: '1px solid var(--vml-border)',
-              color: 'var(--vml-text)',
-            }}
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={submitRunAnswers}
-          className="w-full rounded-lg px-3 py-2 text-xs font-bold"
-          style={{
-            backgroundColor: 'var(--vml-accent)',
-            color: 'var(--vml-accent-text)',
-          }}
+      {/* Declared prerequisites checklist */}
+      {prereqs.length > 0 && (
+        <div
+          className="space-y-1 rounded-xl p-2.5 text-[11px]"
+          style={{ border: '1px solid var(--vml-border)' }}
         >
-          Check answers
-        </button>
-      </div>
+          <div className="font-semibold">Report prerequisites</div>
+          {prereqs.map((p) => (
+            <div key={p.id} className={p.met ? 'text-emerald-400' : ''}>
+              {p.met ? '✓' : '○'} {p.label}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Generic SVG charts */}
+      {charts.map((chart) => (
+        <ObservationChart
+          key={chart.id}
+          spec={chart}
+          columns={stage.observationTable}
+          rows={observationRows}
+          params={stage.physicsParams}
+        />
+      ))}
+
+      {/* Schema-driven student report answers */}
+      {experiment.answers.length > 0 && (
+        <div
+          className="space-y-2.5 rounded-xl p-2.5"
+          style={{ border: '1px solid var(--vml-border)' }}
+        >
+          <div className="font-semibold">Your calculated report</div>
+
+          {experiment.answers.map((ans) => (
+            <div key={ans.id} className="space-y-1">
+              <label
+                htmlFor={`ans-${ans.id}`}
+                className="block text-[11px]"
+                style={{ color: 'var(--vml-text-muted)' }}
+              >
+                {ans.label}
+              </label>
+
+              {ans.kind === 'choice' ? (
+                <select
+                  id={`ans-${ans.id}`}
+                  value={runAnswerInputs[ans.id] ?? ''}
+                  onChange={(e) => setRunAnswerInput(ans.id, e.target.value)}
+                  className="w-full rounded-lg px-2.5 py-1.5 text-xs"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    border: '1px solid var(--vml-border)',
+                    color: 'var(--vml-text)',
+                  }}
+                >
+                  <option value="">Select…</option>
+                  {(ans.options ?? []).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  id={`ans-${ans.id}`}
+                  type="number"
+                  step={ans.step ?? '0.01'}
+                  placeholder={ans.placeholder ?? ''}
+                  value={runAnswerInputs[ans.id] ?? ''}
+                  onChange={(e) => setRunAnswerInput(ans.id, e.target.value)}
+                  className="w-full rounded-lg px-2.5 py-1.5 font-mono text-xs"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    border: '1px solid var(--vml-border)',
+                    color: 'var(--vml-text)',
+                  }}
+                />
+              )}
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={submitRunAnswers}
+            className="w-full rounded-lg px-3 py-2 text-xs font-bold"
+            style={{
+              backgroundColor: 'var(--vml-accent)',
+              color: 'var(--vml-accent-text)',
+            }}
+          >
+            Check answers
+          </button>
+        </div>
+      )}
 
       {/* Run result feedback */}
       {runCheckResult && (

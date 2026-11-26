@@ -4,12 +4,17 @@ import {
   findVariacForTargetV1,
 } from './core/circuit/learn';
 import {
+  getAllLearnSteps,
+  getStage,
+  getStageCameraPresets,
+  getStageIndexById,
+} from './core/circuit/stages';
+import {
   ASSET_MANIFEST,
   getExperimentAssets,
 } from './core/experiments/assets';
 import { getExperiment } from './core/experiments/registry';
 import { evaluateExperimentPhysics } from './core/physics/evaluate';
-import type { CameraPreset } from './core/types';
 import { BenchScene } from './scenes/BenchScene';
 import { useControlsStore } from './stores/controlsStore';
 import { enterLabMode } from './stores/modeActions';
@@ -28,14 +33,6 @@ import { SolutionBanner } from './ui/SolutionBanner';
 import { ThemeToggleButton } from './ui/ThemeToggleButton';
 import { ToastBanner } from './ui/ToastBanner';
 
-const PRESET_BUTTONS: { id: CameraPreset; label: string }[] = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'supply', label: 'Supply' },
-  { id: 'meters', label: 'Meters' },
-  { id: 'transformer', label: 'Transformer' },
-  { id: 'load', label: 'Load' },
-];
-
 const STICKY_EVENT_IDS = new Set([
   'mcb-trip',
   'power-on-non-zero',
@@ -51,6 +48,9 @@ export function App() {
   const screen = useSessionStore((s) => s.screen);
   const experimentId = useSessionStore((s) => s.experimentId);
   const mode = useSessionStore((s) => s.mode);
+  const sessionSeed = useSessionStore((s) => s.sessionSeed);
+  const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
+  const completedStages = useSessionStore((s) => s.completedStages);
   const observationRows = useSessionStore((s) => s.observationRows);
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
@@ -65,6 +65,8 @@ export function App() {
   const learnFinished = useSessionStore((s) => s.learnFinished);
 
   const goToScreen = useSessionStore((s) => s.goToScreen);
+  const setCurrentStageIndex = useSessionStore((s) => s.setCurrentStageIndex);
+  const switchObserveStage = useSessionStore((s) => s.switchObserveStage);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const toggleTerminalLabels = useSessionStore((s) => s.toggleTerminalLabels);
   const toggleSidebar = useSessionStore((s) => s.toggleSidebar);
@@ -93,45 +95,46 @@ export function App() {
   );
   const clearAllWiresScripted = useWiringStore((s) => s.clearAllWiresScripted);
 
-  const supplyOn = useControlsStore((s) => s.supplyOn);
-  const variacV = useControlsStore((s) => s.variacV);
-  const wmVRange = useControlsStore((s) => s.wmVRange);
-  const wmIRange = useControlsStore((s) => s.wmIRange);
-  const lamps = useControlsStore((s) => s.lamps);
+  const controlValues = useControlsStore((s) => s.values);
   const gains = useControlsStore((s) => s.gains);
   const focusedControl = useControlsStore((s) => s.focusedControl);
-  const setSupplyOn = useControlsStore((s) => s.setSupplyOn);
-  const setVariacV = useControlsStore((s) => s.setVariacV);
-  const setLamps = useControlsStore((s) => s.setLamps);
+  const setControlValue = useControlsStore((s) => s.setControlValue);
   const clearMcbTrip = useControlsStore((s) => s.clearMcbTrip);
   const tripMcb = useControlsStore((s) => s.tripMcb);
   const setFocusedControl = useControlsStore((s) => s.setFocusedControl);
   const initFromControls = useControlsStore((s) => s.initFromControls);
 
   const experiment = useMemo(() => getExperiment(experimentId), [experimentId]);
+  const currentStage = useMemo(
+    () => getStage(experiment, currentStageIndex),
+    [experiment, currentStageIndex],
+  );
+  const stageCameraPresets = useMemo(
+    () => getStageCameraPresets(currentStage),
+    [currentStage],
+  );
   const experimentAssets = useMemo(
     () => getExperimentAssets(ASSET_MANIFEST, experimentId),
     [experimentId],
   );
+
   const isLearn = mode === 'learn';
   const isObserve = mode === 'observe';
   const isSelf = mode === 'self';
-  const learnSteps = experiment.learnSteps;
+  const learnSteps = useMemo(() => getAllLearnSteps(experiment), [experiment]);
   const currentLearnStep = learnSteps[learnStepIndex] ?? learnSteps[0];
 
   useEffect(() => {
-    initFromControls(experiment.controls);
-  }, [experiment, initFromControls]);
+    initFromControls(currentStage.controls, sessionSeed);
+  }, [currentStage, sessionSeed, initFromControls]);
 
   const evaluation = useMemo(
     () =>
-      evaluateExperimentPhysics(
-        experiment,
-        wires,
-        { supplyOn, variacV, wmVRange, wmIRange, lamps },
-        gains,
-      ),
-    [experiment, wires, supplyOn, variacV, wmVRange, wmIRange, lamps, gains],
+      evaluateExperimentPhysics(experiment, wires, controlValues, gains, {
+        stageIndex: currentStageIndex,
+        seed: sessionSeed,
+      }),
+    [experiment, wires, controlValues, gains, currentStageIndex, sessionSeed],
   );
 
   const learnConditionStatus = useMemo(() => {
@@ -140,23 +143,13 @@ export function App() {
     }
     return evaluateLearnStepCondition(
       currentLearnStep,
-      { supplyOn, variacV, wmVRange, wmIRange, lamps },
+      controlValues,
       evaluation.output,
       learnNoLoadAck,
     );
-  }, [
-    isLearn,
-    currentLearnStep,
-    supplyOn,
-    variacV,
-    wmVRange,
-    wmIRange,
-    lamps,
-    evaluation.output,
-    learnNoLoadAck,
-  ]);
+  }, [isLearn, currentLearnStep, controlValues, evaluation.output, learnNoLoadAck]);
 
-  // Scripted Learn-mode step controller: camera preset + staggered wire animation
+  // Scripted Learn-mode step controller: automatic stage switch + camera preset + staggered wire animation
   const wireTimersRef = useRef<number[]>([]);
   const clearWireTimers = useCallback(() => {
     for (const t of wireTimersRef.current) {
@@ -167,13 +160,23 @@ export function App() {
 
   useEffect(() => {
     if (screen !== 'lab' || !isLearn || !currentLearnStep) return;
+
+    const targetStageIdx = getStageIndexById(experiment, currentLearnStep.stageId);
+    if (targetStageIdx !== currentStageIndex) {
+      if (useControlsStore.getState().supplyOn) {
+        setControlValue('sup.switch', false);
+      }
+      clearAllWiresScripted();
+      setCurrentStageIndex(targetStageIdx);
+    }
+
     setCameraPreset(currentLearnStep.camera);
 
     clearWireTimers();
     const pairs = currentLearnStep.connectTerminals ?? [];
     if (pairs.length > 0) {
       if (useControlsStore.getState().supplyOn) {
-        setSupplyOn(false);
+        setControlValue('sup.switch', false);
       }
       pairs.forEach(([a, b], idx) => {
         const timer = window.setTimeout(() => {
@@ -191,42 +194,69 @@ export function App() {
     isLearn,
     learnStepIndex,
     currentLearnStep,
+    experiment,
+    currentStageIndex,
+    setCurrentStageIndex,
     setCameraPreset,
-    setSupplyOn,
+    setControlValue,
     addTutorialWire,
+    clearAllWiresScripted,
     clearWireTimers,
   ]);
 
-  // Reset scripted state & rollback wires when going Back across a wire step or past step 12
+  const firstConditionIdx = useMemo(() => {
+    const idx = learnSteps.findIndex((s) => Boolean(s.completionCondition));
+    return idx >= 0 ? idx : learnSteps.length;
+  }, [learnSteps]);
+
   const handleLearnBack = useCallback(() => {
     if (learnStepIndex <= 0) return;
     clearWireTimers();
     const prevIdx = learnStepIndex - 1;
+    const prevStep = learnSteps[prevIdx];
     const leavingWireStep = Boolean(currentLearnStep?.connectTerminals?.length);
-    const crossingPastStep12 = learnStepIndex >= 11 && prevIdx < 11;
+    const crossingPastCondition =
+      learnStepIndex >= firstConditionIdx && prevIdx < firstConditionIdx;
+    const crossingStage =
+      prevStep?.stageId && currentLearnStep?.stageId && prevStep.stageId !== currentLearnStep.stageId;
 
-    if (leavingWireStep || crossingPastStep12) {
-      setSupplyOn(false);
-      setVariacV(0);
-      setLamps(0);
+    if (leavingWireStep || crossingPastCondition || crossingStage) {
+      setControlValue('sup.switch', false);
+      setControlValue('va.knob', 0);
+      setControlValue('ld.lamps', 0);
       clearMcbTrip();
       resetLearnAck();
       removeTutorialWiresFromStep(prevIdx + 1);
-    } else if (learnStepIndex === 12) {
+      if (crossingStage) {
+        const prevStageIdx = getStageIndexById(experiment, prevStep.stageId);
+        setCurrentStageIndex(prevStageIdx);
+        for (let i = 0; i <= prevIdx; i++) {
+          const st = learnSteps[i];
+          if (st.stageId === prevStep.stageId) {
+            for (const [a, b] of st.connectTerminals ?? []) {
+              addTutorialWire(a, b, i);
+            }
+          }
+        }
+      }
+    } else if (currentLearnStep?.completionCondition?.kind === 'no-load-ack') {
       resetLearnAck();
     }
 
     setLearnStepIndex(prevIdx);
   }, [
     learnStepIndex,
+    learnSteps,
     currentLearnStep,
+    firstConditionIdx,
+    experiment,
     clearWireTimers,
-    setSupplyOn,
-    setVariacV,
-    setLamps,
+    setControlValue,
     clearMcbTrip,
     resetLearnAck,
     removeTutorialWiresFromStep,
+    setCurrentStageIndex,
+    addTutorialWire,
     setLearnStepIndex,
   ]);
 
@@ -235,9 +265,12 @@ export function App() {
     if (!cond) return;
 
     const currentWires = useWiringStore.getState().wires;
+    const loadId = 'loadControlId' in cond ? (cond.loadControlId ?? 'ld.lamps') : 'ld.lamps';
+    const meterId = cond.meterId ?? 'vp';
+    const controlId = 'controlId' in cond ? (cond.controlId ?? 'va.knob') : 'va.knob';
     const targetLamps =
       cond.kind === 'loaded-v1-target'
-        ? Math.max(useControlsStore.getState().lamps, cond.minLamps)
+        ? Math.max(Number(useControlsStore.getState().values[loadId] ?? 0), cond.minLamps)
         : 0;
     const targetKnob = findVariacForTargetV1(
       experiment,
@@ -245,21 +278,29 @@ export function App() {
       cond.targetV,
       targetLamps,
       gains,
+      {
+        stageIndex: currentStageIndex,
+        seed: sessionSeed,
+        knobControlId: controlId,
+        loadControlId: loadId,
+        meterId,
+        baseControls: useControlsStore.getState().values,
+      },
     );
 
-    setLamps(targetLamps);
-    setVariacV(targetKnob);
-    setSupplyOn(true);
+    setControlValue(loadId, targetLamps);
+    setControlValue(controlId, targetKnob);
+    setControlValue('sup.switch', true);
     if (cond.kind === 'no-load-ack') {
       ackLearnReading();
     }
   }, [
     currentLearnStep,
     experiment,
+    currentStageIndex,
+    sessionSeed,
     gains,
-    setLamps,
-    setVariacV,
-    setSupplyOn,
+    setControlValue,
     ackLearnReading,
   ]);
 
@@ -280,7 +321,7 @@ export function App() {
 
     const pairs = currentLearnStep?.connectTerminals ?? [];
     if (pairs.length > 0) {
-      setSupplyOn(false);
+      setControlValue('sup.switch', false);
       for (const [a, b] of pairs) {
         addTutorialWire(a, b, learnStepIndex);
       }
@@ -296,7 +337,7 @@ export function App() {
     learnSteps.length,
     currentLearnStep,
     clearWireTimers,
-    setSupplyOn,
+    setControlValue,
     addTutorialWire,
     applyLearnStepControls,
     setLearnStepIndex,
@@ -327,6 +368,7 @@ export function App() {
     prevEventIdsRef.current = currentIds;
   }, [screen, evaluation.output, tripMcb, pushToast, dismissToast]);
 
+  const supplyOn = Boolean(controlValues['sup.switch']);
   useEffect(() => {
     if (supplyOn && !evaluation.output.mcbTripped) {
       dismissToast('mcb-trip');
@@ -429,7 +471,8 @@ export function App() {
 
   const performResetBench = useCallback(() => {
     clearWireTimers();
-    initFromControls(experiment.controls);
+    const stage0 = getStage(experiment, 0);
+    initFromControls(stage0.controls, sessionSeed);
     if (isLearn) {
       clearAllWiresScripted();
     } else if (isSelf) {
@@ -440,7 +483,8 @@ export function App() {
   }, [
     clearWireTimers,
     initFromControls,
-    experiment.controls,
+    experiment,
+    sessionSeed,
     isLearn,
     isSelf,
     clearAllWiresScripted,
@@ -451,14 +495,16 @@ export function App() {
   const handleReplayLearn = useCallback(() => {
     clearWireTimers();
     clearAllWiresScripted();
-    initFromControls(experiment.controls);
+    const stage0 = getStage(experiment, 0);
+    initFromControls(stage0.controls, sessionSeed);
     resetLearnRun();
     prevEventIdsRef.current.clear();
   }, [
     clearWireTimers,
     clearAllWiresScripted,
     initFromControls,
-    experiment.controls,
+    experiment,
+    sessionSeed,
     resetLearnRun,
   ]);
 
@@ -509,11 +555,12 @@ export function App() {
     );
   }
 
-  const learnControlsLocked = isLearn && learnStepIndex < 11;
+  const learnControlsLocked = isLearn && learnStepIndex < firstConditionIdx;
+  const hasMultipleStages = experiment.stages.length > 1;
+  const wiredStageIds = new Set(completedStages[experiment.id] ?? []);
 
   return (
     <div className="fixed inset-0 flex overflow-x-clip overflow-y-hidden select-none">
-      {/* Main 3D canvas area resizes smoothly when sidebar opens/closes */}
       <div className="relative h-full min-w-0 flex-1 overflow-x-clip overflow-y-hidden">
         <BenchScene
           labOutput={evaluation.output}
@@ -586,7 +633,65 @@ export function App() {
             )}
           </div>
 
-          {/* Center group: camera presets */}
+          {/* Stage stepper / tabs when experiment has multiple stages */}
+          {hasMultipleStages && (
+            <div
+              role={isObserve ? 'tablist' : undefined}
+              aria-label="Experiment stages"
+              className="pointer-events-auto flex items-center gap-0.5 rounded-full p-1 shadow-lg backdrop-blur"
+              style={{
+                backgroundColor: 'var(--vml-panel)',
+                border: '1px solid var(--vml-border)',
+                color: 'var(--vml-text)',
+              }}
+            >
+              {experiment.stages.map((st, idx) => {
+                const active = idx === currentStageIndex;
+                const wired = wiredStageIds.has(st.id);
+                if (isObserve) {
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => switchObserveStage(idx)}
+                      className="h-6 rounded-full px-2.5 text-xs font-semibold transition"
+                      style={{
+                        backgroundColor: active
+                          ? 'var(--vml-accent)'
+                          : 'transparent',
+                        color: active
+                          ? 'var(--vml-accent-text)'
+                          : 'var(--vml-text)',
+                      }}
+                    >
+                      {idx + 1}. {st.title}
+                    </button>
+                  );
+                }
+                return (
+                  <span
+                    key={st.id}
+                    className="inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-xs font-semibold"
+                    style={{
+                      backgroundColor: active
+                        ? 'var(--vml-accent)'
+                        : 'transparent',
+                      color: active
+                        ? 'var(--vml-accent-text)'
+                        : 'var(--vml-text-muted)',
+                    }}
+                  >
+                    {wired && !active ? '✓ ' : ''}
+                    {idx + 1}. {st.title}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Center group: per-stage camera presets */}
           <div
             className="pointer-events-auto order-3 flex w-full items-center justify-center gap-0.5 rounded-full p-1 shadow-lg backdrop-blur sm:order-none sm:w-auto"
             style={{
@@ -595,7 +700,7 @@ export function App() {
               color: 'var(--vml-text)',
             }}
           >
-            {PRESET_BUTTONS.map((p) => {
+            {stageCameraPresets.map((p) => {
               const active = cameraPreset === p.id;
               return (
                 <button
@@ -784,6 +889,8 @@ export function App() {
 
         {isLearn ? (
           <LearnPlayer
+            experimentTitle={experiment.title}
+            stageTitle={hasMultipleStages ? currentStage.title : undefined}
             step={currentLearnStep}
             stepIndex={learnStepIndex}
             totalSteps={learnSteps.length}
@@ -820,10 +927,15 @@ export function App() {
 
       <RightSidebar
         experiment={experiment}
-        controls={experiment.controls}
+        controls={currentStage.controls}
         output={evaluation.output}
-        primaryEnergised={evaluation.connectionState.primaryEnergised}
+        energised={evaluation.connectionState.energised}
         controlsLocked={learnControlsLocked}
+        unlockHint={
+          firstConditionIdx < learnSteps.length
+            ? `Unlocks at step ${firstConditionIdx + 1}`
+            : undefined
+        }
       />
 
       {isSelf && (
@@ -860,8 +972,8 @@ export function App() {
                 : confirmAction === 'back'
                   ? 'You have wires placed on the bench. Returning to the experiment picker will clear your current wiring and controls.'
                   : isObserve
-                    ? 'This clears observation rows, supply switch, variac knob, wattmeter ranges, lamp switches, MCB trip, meter damage, and notifications. Pre-wired connections remain unchanged.'
-                    : 'This clears all wires, selected terminals, supply switch, variac knob, wattmeter ranges, lamp switches, MCB trip, meter damage, and notifications.'}
+                    ? 'This clears observation rows, supply switch, variac knob, meter ranges, load switches, MCB trip, meter damage, and notifications. Pre-wired connections remain unchanged.'
+                    : 'This clears all wires, selected terminals, supply switch, variac knob, meter ranges, load switches, MCB trip, meter damage, and notifications.'}
           </p>
           <div className="flex justify-end gap-2">
             <button

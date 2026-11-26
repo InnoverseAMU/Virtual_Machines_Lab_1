@@ -1,3 +1,4 @@
+import { getAllLearnSteps } from '../core/circuit/stages';
 import { ASSET_MANIFEST, getExperimentAssets } from '../core/experiments/assets';
 import { EXPERIMENT_SUMMARIES, getExperiment } from '../core/experiments/registry';
 import { enterLabMode } from '../stores/modeActions';
@@ -16,6 +17,7 @@ export function ModeSelect() {
   const expAssets = getExperimentAssets(ASSET_MANIFEST, experimentId);
   const isLearnDone = Boolean(learnCompleted[experimentId]);
   const isObserveDone = Boolean(runPractised[experimentId]);
+  const learnStepCount = getAllLearnSteps(experiment).length;
 
   return (
     <div
@@ -114,7 +116,7 @@ export function ModeSelect() {
                 className="text-xs leading-relaxed"
                 style={{ color: 'var(--vml-text-muted)' }}
               >
-                Walk through the 17 steps with guided wiring, apparatus
+                Walk through the {learnStepCount} steps with guided wiring, apparatus
                 highlights, and interactive voltage checks.
               </p>
             </div>

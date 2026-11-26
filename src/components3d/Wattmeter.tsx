@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getComponentDef } from '../core/components';
-import type { ComponentInstance, WattmeterReading } from '../core/types';
+import type { ComponentInstance, MeterReading } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
 import { useSessionStore } from '../stores/sessionStore';
 import { LabelPlate, MeterDial } from './LabelPlate';
@@ -8,11 +8,17 @@ import { Terminal } from './Terminal';
 
 interface WattmeterProps {
   instance: ComponentInstance;
-  reading?: WattmeterReading;
+  reading?: MeterReading;
   vRange: number;
   iRange: number;
+  divisions?: number;
+  pf?: number;
   vOptions: number[];
   iOptions: number[];
+  hasVSelector?: boolean;
+  hasISelector?: boolean;
+  hasReverseSwitch?: boolean;
+  reverseOn?: boolean;
   controlsLocked?: boolean;
 }
 
@@ -21,20 +27,30 @@ export function Wattmeter({
   reading,
   vRange,
   iRange,
+  divisions = 150,
+  pf = 1.0,
   vOptions,
   iOptions,
+  hasVSelector = true,
+  hasISelector = true,
+  hasReverseSwitch = false,
+  reverseOn = false,
   controlsLocked = false,
 }: WattmeterProps) {
   const def = getComponentDef(instance.type);
   const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
-  const cycleWmVRange = useControlsStore((s) => s.cycleWmVRange);
-  const cycleWmIRange = useControlsStore((s) => s.cycleWmIRange);
-  const [hoveredSel, setHoveredSel] = useState<'v' | 'i' | null>(null);
+  const cycleControlOption = useControlsStore((s) => s.cycleControlOption);
+  const setControlValue = useControlsStore((s) => s.setControlValue);
+  const [hoveredSel, setHoveredSel] = useState<'v' | 'i' | 'rev' | null>(null);
 
-  const mf = (vRange * iRange) / 150;
+  const activeDivs = reading?.divisions ?? divisions;
+  const activePf = reading?.pf ?? pf;
+  const mf = reading?.mf ?? (vRange * iRange * activePf) / activeDivs;
   const readingText = reading?.damaged
     ? 'DAMAGED'
     : `${(reading?.dial ?? 0).toFixed(1)} div`;
+
+  const pfTag = activePf < 0.99 ? ` · PF ${activePf}` : '';
 
   return (
     <group position={instance.position}>
@@ -56,9 +72,9 @@ export function Wattmeter({
       </mesh>
 
       <MeterDial
-        title="WATTMETER"
-        unit={`DIV (${vRange}V / ${iRange}A)`}
-        maxScale={150}
+        title={instance.label.toUpperCase()}
+        unit={`DIV (${vRange}V / ${iRange}A${pfTag})`}
+        maxScale={activeDivs}
         pointerRatio={reading?.pointerRatio ?? 0}
         readingText={readingText}
         showNumericReadout={showNumericReadouts}
@@ -74,28 +90,30 @@ export function Wattmeter({
 
       {/* Clickable Voltage Range Selector */}
       <group position={[-0.24, 0.33, 0.33]}>
-        <mesh
-          position={[0, 0.03, 0]}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (controlsLocked) return;
-            cycleWmVRange(vOptions);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            if (controlsLocked) return;
-            setHoveredSel('v');
-            document.body.style.cursor = 'pointer';
-          }}
-          onPointerOut={(e) => {
-            e.stopPropagation();
-            setHoveredSel(null);
-            document.body.style.cursor = 'auto';
-          }}
-        >
-          <boxGeometry args={[0.38, 0.14, 0.22]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
+        {hasVSelector && vOptions.length > 1 && (
+          <mesh
+            position={[0, 0.03, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (controlsLocked) return;
+              cycleControlOption(`${instance.id}.vRange`, vOptions);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              if (controlsLocked) return;
+              setHoveredSel('v');
+              document.body.style.cursor = 'pointer';
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              setHoveredSel(null);
+              document.body.style.cursor = 'auto';
+            }}
+          >
+            <boxGeometry args={[0.38, 0.14, 0.22]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        )}
         <LabelPlate
           text={`V: ${vRange} V`}
           width={0.34}
@@ -109,28 +127,30 @@ export function Wattmeter({
 
       {/* Clickable Current Range Selector */}
       <group position={[0.24, 0.33, 0.33]}>
-        <mesh
-          position={[0, 0.03, 0]}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (controlsLocked) return;
-            cycleWmIRange(iOptions);
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            if (controlsLocked) return;
-            setHoveredSel('i');
-            document.body.style.cursor = 'pointer';
-          }}
-          onPointerOut={(e) => {
-            e.stopPropagation();
-            setHoveredSel(null);
-            document.body.style.cursor = 'auto';
-          }}
-        >
-          <boxGeometry args={[0.38, 0.14, 0.22]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
+        {hasISelector && iOptions.length > 1 && (
+          <mesh
+            position={[0, 0.03, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (controlsLocked) return;
+              cycleControlOption(`${instance.id}.iRange`, iOptions);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              if (controlsLocked) return;
+              setHoveredSel('i');
+              document.body.style.cursor = 'pointer';
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              setHoveredSel(null);
+              document.body.style.cursor = 'auto';
+            }}
+          >
+            <boxGeometry args={[0.38, 0.14, 0.22]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+        )}
         <LabelPlate
           text={`I: ${iRange} A`}
           subtext={`MF=${mf.toFixed(1)}`}
@@ -142,6 +162,49 @@ export function Wattmeter({
           rotation={[-Math.PI / 2, 0, 0]}
         />
       </group>
+
+      {/* Optional Reverse Switch on Wattmeter */}
+      {hasReverseSwitch && (
+        <group position={[0, 0.33, 0.33]}>
+          <mesh
+            position={[0, 0.03, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (controlsLocked) return;
+              setControlValue(`${instance.id}.reverse`, !reverseOn);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              if (controlsLocked) return;
+              setHoveredSel('rev');
+              document.body.style.cursor = 'pointer';
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              setHoveredSel(null);
+              document.body.style.cursor = 'auto';
+            }}
+          >
+            <boxGeometry args={[0.14, 0.14, 0.14]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+          <LabelPlate
+            text={reverseOn ? 'REV' : 'FWD'}
+            width={0.12}
+            height={0.11}
+            fontSize={28}
+            bg={
+              hoveredSel === 'rev'
+                ? '#0284c7'
+                : reverseOn
+                  ? '#b45309'
+                  : '#0f172a'
+            }
+            border="#64748b"
+            rotation={[-Math.PI / 2, 0, 0]}
+          />
+        </group>
+      )}
 
       {def.terminals.map((t) => (
         <Terminal

@@ -3,34 +3,51 @@ import { checkPowerOnSafety } from '../core/physics/evaluate';
 import { drawSessionMeterGains } from '../core/physics/meters';
 import type {
   ControlDef,
+  ControlValue,
+  ControlValues,
   MeterGains,
   TransformerLoadControls,
 } from '../core/types';
 import { useSessionStore } from './sessionStore';
 
 interface ControlsState extends TransformerLoadControls {
+  values: ControlValues;
   lampStates: boolean[];
   mcbTripped: boolean;
   focusedControl: string | null;
   isDraggingControl: boolean;
   gains: MeterGains;
 
+  setControlValue: (id: string, value: ControlValue) => void;
+  stepControlValue: (
+    id: string,
+    delta: number,
+    min: number,
+    max: number,
+    precisionStep?: number,
+  ) => void;
+  cycleControlOption: (id: string, options: (number | string)[]) => void;
+
   setSupplyOn: (on: boolean) => void;
   toggleSupply: () => void;
   tripMcb: () => void;
   clearMcbTrip: () => void;
-  setVariacV: (v: number, min?: number, max?: number) => void;
-  stepVariacV: (delta: number, min?: number, max?: number) => void;
+  setVariacV: (v: number, min?: number, max?: number, step?: number) => void;
+  stepVariacV: (delta: number, min?: number, max?: number, step?: number) => void;
   setWmVRange: (vRange: 150 | 300) => void;
   setWmIRange: (iRange: 2.5 | 5 | 10) => void;
   cycleWmVRange: (options: number[]) => void;
   cycleWmIRange: (options: number[]) => void;
   setLamps: (lamps: number, max?: number) => void;
-  toggleLampIndex: (index: number) => void;
+  toggleLampIndex: (index: number, controlId?: string) => void;
   setFocusedControl: (id: string | null) => void;
   setIsDraggingControl: (dragging: boolean) => void;
-  initFromControls: (controls: ControlDef[]) => void;
-  resetControls: () => void;
+  initFromControls: (
+    controls: ControlDef[],
+    seed?: number,
+    meterIds?: string[],
+  ) => void;
+  resetControls: (seed?: number) => void;
 }
 
 function createFreshSeed(): number {
@@ -41,7 +58,53 @@ function makeLampArray(count: number, max = 12): boolean[] {
   return Array.from({ length: max }, (_, i) => i < count);
 }
 
+function quantizeValue(val: number, min: number, max: number, step?: number): number {
+  const clamped = Math.max(min, Math.min(max, val));
+  if (!step || step >= 1) {
+    return Math.round(clamped * 10) / 10 === Math.round(clamped)
+      ? Math.round(clamped)
+      : Math.round(clamped * 10) / 10;
+  }
+  const decimals = Math.max(0, Math.ceil(-Math.log10(step)));
+  const factor = 10 ** decimals;
+  return Math.round(clamped * factor) / factor;
+}
+
+function syncLegacyFromValues(
+  values: ControlValues,
+  prevState: Pick<
+    ControlsState,
+    'supplyOn' | 'variacV' | 'wmVRange' | 'wmIRange' | 'lamps' | 'lampStates'
+  >,
+): Pick<
+  ControlsState,
+  'supplyOn' | 'variacV' | 'wmVRange' | 'wmIRange' | 'lamps' | 'lampStates'
+> {
+  const supplyOn =
+    'sup.switch' in values ? Boolean(values['sup.switch']) : prevState.supplyOn;
+  const variacV =
+    'va.knob' in values ? Number(values['va.knob']) : prevState.variacV;
+  const rawV = Number(values['wm.vRange'] ?? prevState.wmVRange);
+  const wmVRange: 150 | 300 = rawV === 150 ? 150 : 300;
+  const rawI = Number(values['wm.iRange'] ?? prevState.wmIRange);
+  const wmIRange: 2.5 | 5 | 10 = rawI === 2.5 ? 2.5 : rawI === 5 ? 5 : 10;
+  const lamps = 'ld.lamps' in values ? Number(values['ld.lamps']) : prevState.lamps;
+  const lampStates =
+    'ld.lamps' in values
+      ? makeLampArray(lamps, prevState.lampStates.length || 12)
+      : prevState.lampStates;
+
+  return { supplyOn, variacV, wmVRange, wmIRange, lamps, lampStates };
+}
+
 export const useControlsStore = create<ControlsState>((set, get) => ({
+  values: {
+    'sup.switch': false,
+    'va.knob': 0,
+    'wm.vRange': 300,
+    'wm.iRange': 10,
+    'ld.lamps': 0,
+  },
   supplyOn: false,
   variacV: 0,
   wmVRange: 300,
@@ -53,16 +116,47 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
   isDraggingControl: false,
   gains: drawSessionMeterGains(createFreshSeed()),
 
-  setSupplyOn: (supplyOn) => {
-    if (supplyOn) {
-      const warn = checkPowerOnSafety(get().variacV);
+  setControlValue: (id, value) => {
+    const state = get();
+    if (id.endsWith('.switch') && value === true) {
+      const knobVal = Number(state.values['va.knob'] ?? state.variacV ?? 0);
+      const warn = checkPowerOnSafety(knobVal);
       if (warn) {
         useSessionStore.getState().pushToast(warn);
       }
-      set({ supplyOn: true, mcbTripped: false });
-    } else {
-      set({ supplyOn: false });
     }
+    const nextValues = { ...state.values, [id]: value };
+    const synced = syncLegacyFromValues(nextValues, state);
+    set({
+      values: nextValues,
+      ...synced,
+      ...(id.endsWith('.switch') && value === true ? { mcbTripped: false } : {}),
+    });
+  },
+
+  stepControlValue: (id, delta, min, max, precisionStep) => {
+    const state = get();
+    const cur = Number(state.values[id] ?? 0);
+    const effectiveStep = precisionStep ?? (Math.abs(delta) < 1 ? Math.abs(delta) : undefined);
+    const next = quantizeValue(cur + delta, min, max, effectiveStep);
+    const nextValues = { ...state.values, [id]: next };
+    const synced = syncLegacyFromValues(nextValues, state);
+    set({ values: nextValues, ...synced });
+  },
+
+  cycleControlOption: (id, options) => {
+    if (options.length === 0) return;
+    const state = get();
+    const current = state.values[id];
+    const idx = options.indexOf(current as number | string);
+    const next = options[(idx + 1) % options.length];
+    const nextValues = { ...state.values, [id]: next };
+    const synced = syncLegacyFromValues(nextValues, state);
+    set({ values: nextValues, ...synced });
+  },
+
+  setSupplyOn: (supplyOn) => {
+    get().setControlValue('sup.switch', supplyOn);
   },
 
   toggleSupply: () => {
@@ -70,23 +164,45 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
     get().setSupplyOn(next);
   },
 
-  tripMcb: () => set({ supplyOn: false, mcbTripped: true }),
+  tripMcb: () =>
+    set((state) => ({
+      supplyOn: false,
+      mcbTripped: true,
+      values: { ...state.values, 'sup.switch': false },
+    })),
 
   clearMcbTrip: () => set({ mcbTripped: false }),
 
-  setVariacV: (v, min = 0, max = 270) =>
-    set({
-      variacV: Math.max(min, Math.min(max, Math.round(v))),
-    }),
-
-  stepVariacV: (delta, min = 0, max = 270) =>
+  setVariacV: (v, min = 0, max = 270, step) => {
+    const next = quantizeValue(v, min, max, step);
     set((state) => ({
-      variacV: Math.max(min, Math.min(max, Math.round(state.variacV + delta))),
+      variacV: next,
+      values: { ...state.values, 'va.knob': next },
+    }));
+  },
+
+  stepVariacV: (delta, min = 0, max = 270, step) => {
+    const effectiveStep = step ?? (Math.abs(delta) < 1 ? Math.abs(delta) : undefined);
+    set((state) => {
+      const next = quantizeValue(state.variacV + delta, min, max, effectiveStep);
+      return {
+        variacV: next,
+        values: { ...state.values, 'va.knob': next },
+      };
+    });
+  },
+
+  setWmVRange: (wmVRange) =>
+    set((state) => ({
+      wmVRange,
+      values: { ...state.values, 'wm.vRange': wmVRange },
     })),
 
-  setWmVRange: (wmVRange) => set({ wmVRange }),
-
-  setWmIRange: (wmIRange) => set({ wmIRange }),
+  setWmIRange: (wmIRange) =>
+    set((state) => ({
+      wmIRange,
+      values: { ...state.values, 'wm.iRange': wmIRange },
+    })),
 
   cycleWmVRange: (options) => {
     if (options.length === 0) return;
@@ -94,7 +210,7 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
     const idx = options.indexOf(current);
     const next = options[(idx + 1) % options.length];
     if (next === 150 || next === 300) {
-      set({ wmVRange: next });
+      get().setWmVRange(next);
     }
   },
 
@@ -104,19 +220,20 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
     const idx = options.indexOf(current);
     const next = options[(idx + 1) % options.length];
     if (next === 2.5 || next === 5 || next === 10) {
-      set({ wmIRange: next });
+      get().setWmIRange(next);
     }
   },
 
   setLamps: (count, max = get().lampStates.length || 12) => {
     const clamped = Math.max(0, Math.min(max, Math.round(count)));
-    set({
+    set((state) => ({
       lamps: clamped,
       lampStates: makeLampArray(clamped, max),
-    });
+      values: { ...state.values, 'ld.lamps': clamped },
+    }));
   },
 
-  toggleLampIndex: (index) =>
+  toggleLampIndex: (index, controlId = 'ld.lamps') =>
     set((state) => {
       if (index < 0 || index >= state.lampStates.length) return state;
       const nextStates = [...state.lampStates];
@@ -125,6 +242,7 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
       return {
         lampStates: nextStates,
         lamps: count,
+        values: { ...state.values, [controlId]: count },
       };
     }),
 
@@ -132,17 +250,24 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
 
   setIsDraggingControl: (isDraggingControl) => set({ isDraggingControl }),
 
-  initFromControls: (controls) => {
+  initFromControls: (controls, seed, meterIds) => {
+    const values: ControlValues = {};
+    for (const ctrl of controls) {
+      values[ctrl.id] = ctrl.defaultValue;
+    }
+
     const sw = controls.find((c) => c.id === 'sup.switch');
     const knob = controls.find((c) => c.id === 'va.knob');
     const vSel = controls.find((c) => c.id === 'wm.vRange');
     const iSel = controls.find((c) => c.id === 'wm.iRange');
-    const steps = controls.find((c) => c.id === 'ld.lamps');
+    const steps = controls.find((c) => c.kind === 'steps');
 
     const maxLamps = steps?.kind === 'steps' ? steps.max : 12;
     const defaultLamps = steps?.kind === 'steps' ? steps.defaultValue : 0;
+    const resolvedSeed = seed ?? useSessionStore.getState().sessionSeed ?? createFreshSeed();
 
     set({
+      values,
       supplyOn: sw?.kind === 'switch' ? sw.defaultValue : false,
       variacV: knob?.kind === 'knob' ? knob.defaultValue : 0,
       wmVRange:
@@ -162,21 +287,31 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
       mcbTripped: false,
       focusedControl: null,
       isDraggingControl: false,
-      gains: drawSessionMeterGains(createFreshSeed()),
+      gains: drawSessionMeterGains(resolvedSeed, meterIds),
     });
   },
 
-  resetControls: () =>
-    set((state) => ({
-      supplyOn: false,
-      variacV: 0,
-      wmVRange: 300,
-      wmIRange: 10,
-      lamps: 0,
-      lampStates: makeLampArray(0, state.lampStates.length || 12),
-      mcbTripped: false,
-      focusedControl: null,
-      isDraggingControl: false,
-      gains: drawSessionMeterGains(createFreshSeed()),
-    })),
+  resetControls: (seed) =>
+    set((state) => {
+      const resolvedSeed = seed ?? useSessionStore.getState().sessionSeed ?? createFreshSeed();
+      return {
+        values: {
+          'sup.switch': false,
+          'va.knob': 0,
+          'wm.vRange': 300,
+          'wm.iRange': 10,
+          'ld.lamps': 0,
+        },
+        supplyOn: false,
+        variacV: 0,
+        wmVRange: 300,
+        wmIRange: 10,
+        lamps: 0,
+        lampStates: makeLampArray(0, state.lampStates.length || 12),
+        mcbTripped: false,
+        focusedControl: null,
+        isDraggingControl: false,
+        gains: drawSessionMeterGains(resolvedSeed),
+      };
+    }),
 }));

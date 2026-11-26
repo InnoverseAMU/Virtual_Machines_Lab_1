@@ -1,95 +1,82 @@
-import type { ExperimentDef, Net } from '../types';
+import {
+  ammeterAcrossSource,
+  liveNeutralShort,
+  voltmeterInSeries,
+  wattmeterFaults,
+} from '../circuit/faultFactories';
+import { crossProduct } from '../circuit/nets';
+import {
+  computeRunTruth,
+  getRowNumber,
+  MAX_EFF_LOAD_TOLERANCE_PP,
+  REGULATION_TOLERANCE_PP,
+  V1_HOLD_TOLERANCE_V,
+} from '../physics/report';
+import type { ExperimentDef, LearnStep, Net, StageDef } from '../types';
 
-/**
- * Connection (a): wattmeter V1 tied to M (canonical solution shown to students).
- */
-export const NET_A: Net[] = [
-  ['sup.P', 'va.IN_P'],
-  ['sup.N', 'va.IN_N', 'va.OUT_N', 'wm.V2', 'tx.P2', 'vp.B'],
-  ['va.OUT_P', 'wm.M', 'wm.V1'],
-  ['wm.L', 'tx.P1', 'vp.A'],
-  ['tx.S1', 'vs.A', 'am.IN'],
-  ['am.OUT', 'ld.A'],
-  ['tx.S2', 'vs.B', 'ld.B'],
-];
+const N1: Net = ['sup.P', 'va.IN_P'];
+const N2: Net = ['sup.N', 'va.IN_N', 'va.OUT_N', 'wm.V2', 'tx.P2', 'vp.B'];
+const N5: Net = ['tx.S1', 'vs.A', 'am.IN'];
+const N6: Net = ['am.OUT', 'ld.A'];
+const N7: Net = ['tx.S2', 'vs.B', 'ld.B'];
 
-/**
- * Connection (b): wattmeter V1 tied to L.
- */
-export const NET_B: Net[] = [
-  ['sup.P', 'va.IN_P'],
-  ['sup.N', 'va.IN_N', 'va.OUT_N', 'wm.V2', 'tx.P2', 'vp.B'],
-  ['va.OUT_P', 'wm.M'],
-  ['wm.L', 'wm.V1', 'tx.P1', 'vp.A'],
-  ['tx.S1', 'vs.A', 'am.IN'],
-  ['am.OUT', 'ld.A'],
-  ['tx.S2', 'vs.B', 'ld.B'],
-];
-
-export const ex3_1: ExperimentDef = {
-  id: 'ex3.1',
-  title: 'Load test of single-phase transformer',
-  object: [
-    'Perform a load test on a single-phase transformer.',
-    'Determine (a) voltage regulation and (b) efficiency.',
-    'Plot efficiency versus load.',
+const WM_V1_VARIANTS: Net[][] = [
+  // Connection (a): wattmeter V1 tied to M (canonical solution)
+  [
+    ['va.OUT_P', 'wm.M', 'wm.V1'],
+    ['wm.L', 'tx.P1', 'vp.A'],
   ],
-  components: [
+  // Connection (b): wattmeter V1 tied to L
+  [
+    ['va.OUT_P', 'wm.M'],
+    ['wm.L', 'wm.V1', 'tx.P1', 'vp.A'],
+  ],
+];
+
+export const [NET_A, NET_B] = crossProduct([
+  [[N1, N2]],
+  WM_V1_VARIANTS,
+  [[N5, N6, N7]],
+]);
+
+const STAGE_ID = 'load-test';
+
+const ex3_1Stage: StageDef = {
+  id: STAGE_ID,
+  title: 'Load test (230 / 115 V)',
+  summary:
+    'Wire the single-phase transformer load test, hold primary voltage at 230 V, and record readings from no-load to full load.',
+  componentIds: ['sup', 'va', 'wm', 'vp', 'tx', 'vs', 'am', 'ld'],
+  cameraPresets: [
     {
-      id: 'sup',
-      type: 'acSupply',
-      label: '230 V AC supply with MCB',
-      position: [-4.3, 0, -0.2],
-      params: { V: 230, f: 50 },
+      id: 'overview',
+      label: 'Overview',
+      pos: [0.25, 9.2, 8.4],
+      target: [0.25, -1.15, 0.05],
     },
     {
-      id: 'va',
-      type: 'variac1ph',
-      label: 'Autotransformer',
-      position: [-2.6, 0, -0.15],
-      params: { Vin: 230, VoutMax: 270, kVA: 3 },
+      id: 'supply',
+      label: 'Supply',
+      pos: [-3.45, 3.8, 4.3],
+      target: [-3.45, -0.75, -0.15],
     },
     {
-      id: 'wm',
-      type: 'wattmeter',
-      label: 'Wattmeter',
-      position: [-0.8, 0, 0.8],
-      params: { vRange: 300, iRange: 10, divisions: 150 },
+      id: 'meters',
+      label: 'Meters',
+      pos: [0.05, 6.2, 6.0],
+      target: [0.05, -1.1, -0.15],
     },
     {
-      id: 'vp',
-      type: 'voltmeter',
-      label: 'V primary',
-      position: [-0.8, 0.36, -1.2],
-      params: { range: 300 },
+      id: 'transformer',
+      label: 'Transformer',
+      pos: [0.15, 4.4, 4.8],
+      target: [0.15, -0.75, 0.15],
     },
     {
-      id: 'tx',
-      type: 'transformer1ph',
-      label: 'Transformer 2 kVA 230/115 V',
-      position: [1.0, 0, -0.15],
-      params: { kVA: 2, V1: 230, V2: 115, I1rated: 8.7, I2rated: 17.39 },
-    },
-    {
-      id: 'vs',
-      type: 'voltmeter',
-      label: 'V secondary',
-      position: [2.75, 0.36, -1.2],
-      params: { range: 150 },
-    },
-    {
-      id: 'am',
-      type: 'ammeter',
-      label: 'A secondary',
-      position: [2.75, 0, 0.8],
-      params: { range: 25 },
-    },
-    {
-      id: 'ld',
-      type: 'lampLoad',
-      label: 'Lamp bank (12 x 200 W)',
-      position: [4.55, 0, -0.15],
-      params: { lamps: 12, wattsPerLamp: 200, Vrated: 115 },
+      id: 'load',
+      label: 'Load',
+      pos: [2.0, 6.6, 6.3],
+      target: [2.0, -1.2, -0.15],
     },
   ],
   acceptedNetlists: [NET_A, NET_B],
@@ -131,96 +118,16 @@ export const ex3_1: ExperimentDef = {
     load: 'Load: connects the ammeter output in series with the 12-lamp resistive load bank.',
   },
   faultPatterns: [
-    // Six core fault patterns (Spec Section 5)
-    {
-      id: 'wm-cc-reversed',
-      description:
-        'The wattmeter current coil is the wrong way round. M faces the mains, L faces the load.',
-      match: {
-        connected: [['wm.L', 'va.OUT_P']],
-        notConnected: [['wm.M', 'va.OUT_P']],
-      },
-      effect: 'reversed-reading',
-      effectTarget: 'wm',
-    },
-    {
-      id: 'wm-pc-open',
-      description:
-        'The wattmeter pressure coil is not across the supply, so it senses no voltage.',
-      match: {
-        notConnected: [['wm.V2', 'sup.N']],
-        anyConnected: [
-          ['sup.N', 'va.IN_N'],
-          ['wm.V1', 'va.OUT_P'],
-          ['wm.V1', 'wm.M'],
-          ['wm.V1', 'wm.L'],
-        ],
-      },
-      effect: 'no-reading',
-      effectTarget: 'wm',
-    },
-    {
-      id: 'wm-pc-reversed',
-      description:
-        'The pressure coil ends are swapped. V1 goes to the live side, V2 to neutral.',
-      match: {
-        anyConnected: [
-          ['wm.V1', 'sup.N'],
-          ['wm.V1', 'va.IN_N'],
-          ['wm.V1', 'va.OUT_N'],
-        ],
-        notConnected: [
-          ['wm.V1', 'va.OUT_P'],
-          ['wm.V1', 'wm.L'],
-        ],
-      },
-      effect: 'reversed-reading',
-      effectTarget: 'wm',
-    },
-    {
+    ...wattmeterFaults('wm', NET_A),
+    ammeterAcrossSource('am', ['tx.S1', 'tx.S2'], {
       id: 'ammeter-across-secondary',
       description:
         'The ammeter is across the secondary instead of in series with the load. An ammeter is almost a short circuit.',
-      match: {
-        anyGroup: [
-          {
-            connected: [
-              ['am.IN', 'tx.S1'],
-              ['am.OUT', 'tx.S2'],
-            ],
-          },
-          {
-            connected: [
-              ['am.OUT', 'tx.S1'],
-              ['am.IN', 'tx.S2'],
-            ],
-          },
-        ],
-      },
-      effect: 'short',
-      effectTarget: 'am',
-    },
-    {
-      id: 'live-neutral-short',
-      description: 'A live terminal is connected to neutral.',
-      match: {
-        anyConnected: [
-          ['sup.P', 'sup.N'],
-          ['va.IN_P', 'sup.N'],
-          ['va.OUT_P', 'sup.N'],
-          ['wm.M', 'sup.N'],
-          ['wm.L', 'sup.N'],
-          ['tx.P1', 'sup.N'],
-          ['sup.P', 'va.IN_N'],
-          ['va.OUT_P', 'va.IN_N'],
-          ['wm.M', 'va.IN_N'],
-          ['wm.L', 'va.IN_N'],
-          ['tx.P1', 'va.IN_N'],
-        ],
-      },
-      effect: 'short',
-      effectTarget: 'sup',
-    },
+    }),
+    liveNeutralShort(
+      [['sup.P', 'va.IN_P', 'va.OUT_P', 'wm.M', 'wm.L', 'tx.P1']],
+      ['sup.N', 'va.IN_N'],
+    ),
     {
       id: 'variac-bypassed',
       description:
@@ -234,89 +141,25 @@ export const ex3_1: ExperimentDef = {
       effect: 'wrong-reading',
       effectTarget: 'va',
     },
-    // Two stretch fault patterns (Spec Section 5)
-    {
-      id: 'voltmeter-in-series-load',
-      description:
-        'A voltmeter must be connected across what it measures, not in series with the load.',
-      match: {
-        anyGroup: [
-          {
-            connected: [
-              ['vs.A', 'tx.S1'],
-              ['vs.B', 'ld.A'],
-            ],
-            notConnected: [
-              ['vs.B', 'tx.S2'],
-              ['vs.B', 'ld.B'],
-            ],
-          },
-          {
-            connected: [
-              ['vs.B', 'tx.S1'],
-              ['vs.A', 'ld.A'],
-            ],
-            notConnected: [
-              ['vs.A', 'tx.S2'],
-              ['vs.A', 'ld.B'],
-            ],
-          },
-          {
-            connected: [
-              ['vs.A', 'tx.S1'],
-              ['vs.B', 'am.IN'],
-            ],
-            notConnected: [
-              ['vs.B', 'tx.S2'],
-              ['vs.B', 'ld.B'],
-            ],
-          },
-          {
-            connected: [
-              ['vs.A', 'am.OUT'],
-              ['vs.B', 'ld.A'],
-            ],
-            notConnected: [
-              ['vs.B', 'tx.S2'],
-              ['vs.B', 'ld.B'],
-            ],
-          },
-        ],
+    voltmeterInSeries(
+      'vs',
+      [
+        ['tx.S1', 'ld.A'],
+        ['tx.S1', 'am.IN'],
+        ['am.OUT', 'ld.A'],
+      ],
+      ['tx.S2', 'ld.B'],
+      {
+        id: 'voltmeter-in-series-load',
+        description:
+          'A voltmeter must be connected across what it measures, not in series with the load.',
       },
-      effect: 'wrong-reading',
-      effectTarget: 'vs',
-    },
-    {
+    ),
+    voltmeterInSeries('vp', [['wm.L', 'tx.P1']], ['sup.N', 'va.OUT_N'], {
       id: 'voltmeter-in-series-primary',
       description:
         'The primary voltmeter is in series with the transformer. Connect it across the primary winding.',
-      match: {
-        anyGroup: [
-          {
-            connected: [
-              ['vp.A', 'wm.L'],
-              ['vp.B', 'tx.P1'],
-            ],
-            notConnected: [
-              ['vp.B', 'sup.N'],
-              ['vp.B', 'va.OUT_N'],
-            ],
-          },
-          {
-            connected: [
-              ['vp.B', 'wm.L'],
-              ['vp.A', 'tx.P1'],
-            ],
-            notConnected: [
-              ['vp.A', 'sup.N'],
-              ['vp.A', 'va.OUT_N'],
-            ],
-          },
-        ],
-      },
-      effect: 'wrong-reading',
-      effectTarget: 'vp',
-    },
+    }),
   ],
   controls: [
     {
@@ -334,6 +177,7 @@ export const ex3_1: ExperimentDef = {
       min: 0,
       max: 270,
       step: 1,
+      fineStep: 0.1,
       unit: 'V',
       defaultValue: 0,
     },
@@ -383,17 +227,201 @@ export const ex3_1: ExperimentDef = {
     wmDivisions: 150,
   },
   observationTable: [
-    { key: 'sno', label: 'S.No.' },
-    { key: 'v1', label: 'Primary Voltage V1', unit: 'V' },
-    { key: 'i2', label: 'Secondary Current I2', unit: 'A' },
-    { key: 'v2', label: 'Secondary Voltage V2', unit: 'V' },
-    { key: 'dial', label: 'Wattmeter Dial', unit: 'div' },
-    { key: 'mf', label: 'MF', unit: 'W/div' },
-    { key: 'p1', label: 'Input Power P1', unit: 'W' },
+    {
+      id: 'sno',
+      label: 'S.No.',
+      shortLabel: '#',
+      source: { kind: 'sno' },
+      decimals: 0,
+    },
+    {
+      id: 'v1',
+      label: 'Primary Voltage V1',
+      shortLabel: 'V1',
+      unit: 'V',
+      source: { kind: 'meter', meterId: 'vp' },
+      decimals: 1,
+      displayDecimals: 1,
+    },
+    {
+      id: 'i2',
+      label: 'Secondary Current I2',
+      shortLabel: 'I2',
+      unit: 'A',
+      source: { kind: 'meter', meterId: 'am' },
+      decimals: 2,
+      displayDecimals: 2,
+    },
+    {
+      id: 'v2',
+      label: 'Secondary Voltage V2',
+      shortLabel: 'V2',
+      unit: 'V',
+      source: { kind: 'meter', meterId: 'vs' },
+      decimals: 1,
+      displayDecimals: 1,
+    },
+    {
+      id: 'dial',
+      label: 'Wattmeter Dial',
+      shortLabel: 'Dial',
+      unit: 'div',
+      source: { kind: 'meter', meterId: 'wm', field: 'dial' },
+      decimals: 1,
+      displayDecimals: 1,
+    },
+    {
+      id: 'mf',
+      label: 'MF',
+      shortLabel: 'MF',
+      unit: 'W/div',
+      source: { kind: 'meter', meterId: 'wm', field: 'mf' },
+      decimals: 2,
+      displayDecimals: 1,
+    },
+    {
+      id: 'p1',
+      label: 'Input Power P1',
+      shortLabel: 'P1',
+      unit: 'W',
+      source: { kind: 'meter', meterId: 'wm', field: 'shownValue' },
+      decimals: 1,
+      displayDecimals: 0,
+    },
+    {
+      id: 'eff',
+      label: 'Efficiency η',
+      shortLabel: 'η%',
+      unit: '%',
+      source: {
+        kind: 'derived',
+        compute: (row) => {
+          const p1 = Number(row.p1 ?? 0);
+          const i2 = Number(row.i2 ?? 0);
+          const v2 = Number(row.v2 ?? 0);
+          if (p1 <= 0 || i2 <= 0) return null;
+          return ((v2 * i2) / p1) * 100;
+        },
+      },
+      decimals: 1,
+      displayDecimals: 1,
+      placeholder: '—',
+    },
+    {
+      id: 'loadVA',
+      label: 'Load VA',
+      unit: 'VA',
+      hidden: true,
+      source: {
+        kind: 'derived',
+        compute: (row) => Number(row.v2 ?? 0) * Number(row.i2 ?? 0),
+      },
+      decimals: 1,
+    },
+    {
+      id: 'lamps',
+      label: 'Lamps',
+      hidden: true,
+      source: { kind: 'control', controlId: 'ld.lamps' },
+      decimals: 0,
+    },
+  ],
+  rowRules: [
+    {
+      id: 'v1-hold',
+      label: 'Hold V1 within 230 ± 2 V',
+      amber: true,
+      highlightColumnIds: ['v1'],
+      predicate: (row, params) =>
+        Math.abs(getRowNumber(row, 'v1') - (params.V1rated ?? 230)) <=
+        V1_HOLD_TOLERANCE_V,
+      message: (row) =>
+        `Row ${row.sno} recorded with V1 = ${getRowNumber(row, 'v1').toFixed(1)} V (outside 230 ± 2 V).`,
+      minPassCount: 5,
+      failMessage: (passCount, totalCount) =>
+        `Primary voltage V1 was within 230 ± ${V1_HOLD_TOLERANCE_V} V in only ${passCount} of ${totalCount} rows (at least 5 required).`,
+      failHint: (badRows) =>
+        `The primary voltage was not held at 230 ± ${V1_HOLD_TOLERANCE_V} V in ${
+          badRows.length === 1 ? 'row' : 'rows'
+        } ${badRows.map((r) => r.sno).join(', ')}.`,
+      crossRowHint: (rows) => {
+        const noLoadRow = rows.find((r) => getRowNumber(r, 'i2') <= 0.1);
+        const ratedRow = rows.find((r) => {
+          const i2 = getRowNumber(r, 'i2');
+          return i2 >= 15 && i2 <= 19;
+        });
+        if (
+          noLoadRow !== undefined &&
+          ratedRow !== undefined &&
+          Math.abs(
+            getRowNumber(noLoadRow, 'v1') - getRowNumber(ratedRow, 'v1'),
+          ) > V1_HOLD_TOLERANCE_V
+        ) {
+          return `Primary voltage V1 differed between your no-load row (${getRowNumber(
+            noLoadRow,
+            'v1',
+          ).toFixed(1)} V) and your near-rated row (${getRowNumber(
+            ratedRow,
+            'v1',
+          ).toFixed(1)} V); hold V1 steady at 230 V under load before recording.`;
+        }
+        return null;
+      },
+    },
+  ],
+  prerequisites: [
+    {
+      id: 'no-load-row',
+      label: 'No-load row (I2 = 0 A)',
+      predicate: (rows) => rows.some((r) => getRowNumber(r, 'i2') <= 0.1),
+      failMessage: 'Missing a no-load observation row (I2 = 0 A).',
+      failHint: 'Switch all lamps OFF at 230 V and add a no-load row.',
+    },
+    {
+      id: 'rated-row',
+      label: 'Near-rated row (I2 between 15 and 19 A)',
+      predicate: (rows) =>
+        rows.some((r) => {
+          const i2 = getRowNumber(r, 'i2');
+          return i2 >= 15 && i2 <= 19;
+        }),
+      failMessage:
+        'Missing an observation row near rated current (I2 between 15 and 19 A).',
+      failHint:
+        'Turn on 9 to 11 lamps (around 15 to 19 A) and record a near-full-load row.',
+    },
+    {
+      id: 'min-rows',
+      label: (rows) => `At least 6 rows (${rows.length}/6)`,
+      predicate: (rows) => rows.length >= 6,
+      failMessage: 'Fewer than 6 observation rows recorded.',
+      failHint:
+        'Record at least 6 load steps from no-load up to near rated current.',
+    },
+  ],
+  charts: [
+    {
+      id: 'efficiency-vs-load',
+      title: 'Efficiency vs Load VA',
+      subtitle: 'Rated: 2000 VA',
+      xColumn: 'loadVA',
+      series: [{ yColumn: 'eff', label: 'Efficiency (%)' }],
+      xLabel: 'Load (VA)',
+      yLabel: 'Efficiency (%)',
+      xMin: 0,
+      xMax: 2400,
+      yMin: 80,
+      yMax: 100,
+      referenceLines: [
+        { axis: 'x', value: 2000, label: '2000 VA', color: '#f59e0b' },
+      ],
+      emptyText: 'Record loaded rows to plot curve',
+    },
   ],
   learnSteps: [
     {
       id: 'step-1',
+      stageId: STAGE_ID,
       camera: 'overview',
       focus: ['sup', 'va', 'wm', 'vp', 'tx', 'vs', 'am', 'ld'],
       title: 'Experiment Overview',
@@ -401,6 +429,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-2',
+      stageId: STAGE_ID,
       camera: 'overview',
       focus: ['sup'],
       title: 'Safety & Ratings',
@@ -408,6 +437,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-3',
+      stageId: STAGE_ID,
       camera: 'supply',
       focus: ['sup', 'va'],
       title: 'Autotransformer Purpose',
@@ -415,6 +445,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-4',
+      stageId: STAGE_ID,
       camera: 'supply',
       focus: ['sup', 'va'],
       title: 'Wire Supply to Autotransformer',
@@ -426,6 +457,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-5',
+      stageId: STAGE_ID,
       camera: 'meters',
       focus: ['wm'],
       title: 'Wattmeter Coils',
@@ -433,6 +465,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-6',
+      stageId: STAGE_ID,
       camera: 'meters',
       focus: ['wm', 'va'],
       title: 'Connect Wattmeter Input & Pressure Coil',
@@ -445,6 +478,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-7',
+      stageId: STAGE_ID,
       camera: 'transformer',
       focus: ['tx'],
       title: 'Transformer Under Test',
@@ -452,6 +486,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-8',
+      stageId: STAGE_ID,
       camera: 'transformer',
       focus: ['wm', 'tx'],
       title: 'Connect Primary Winding',
@@ -463,6 +498,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-9',
+      stageId: STAGE_ID,
       camera: 'meters',
       focus: ['vp'],
       title: 'Primary Voltmeter',
@@ -474,6 +510,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-10',
+      stageId: STAGE_ID,
       camera: 'load',
       focus: ['am', 'vs'],
       title: 'Secondary Meters',
@@ -486,6 +523,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-11',
+      stageId: STAGE_ID,
       camera: 'load',
       focus: ['ld'],
       title: 'Lamp Bank Load',
@@ -497,6 +535,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-12',
+      stageId: STAGE_ID,
       camera: 'supply',
       focus: ['sup', 'va'],
       title: 'Energise From Zero',
@@ -509,6 +548,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-13',
+      stageId: STAGE_ID,
       camera: 'meters',
       focus: ['wm', 'vs'],
       title: 'No-Load Reading',
@@ -522,6 +562,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-14',
+      stageId: STAGE_ID,
       camera: 'load',
       focus: ['ld', 'vp'],
       title: 'Load Steps & Holding V1',
@@ -535,6 +576,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-15',
+      stageId: STAGE_ID,
       camera: 'meters',
       focus: ['wm'],
       title: 'Wattmeter Multiplying Factor',
@@ -542,6 +584,7 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-16',
+      stageId: STAGE_ID,
       camera: 'overview',
       focus: ['vs'],
       title: 'Voltage Regulation',
@@ -549,10 +592,119 @@ export const ex3_1: ExperimentDef = {
     },
     {
       id: 'step-17',
+      stageId: STAGE_ID,
       camera: 'overview',
       focus: [],
       title: 'Efficiency Curve',
       why: 'Efficiency = V2 x I2 / P1 x 100 for a resistive load. Plotting efficiency against load shows a maximum where copper loss equals iron loss.',
+    },
+  ],
+};
+
+export const ex3_1: ExperimentDef & {
+  readonly learnSteps: LearnStep[];
+  readonly faultPatterns: StageDef['faultPatterns'];
+} = {
+  id: 'ex3.1',
+  title: 'Load test of single-phase transformer',
+  object: [
+    'Perform a load test on a single-phase transformer.',
+    'Determine (a) voltage regulation and (b) efficiency.',
+    'Plot efficiency versus load.',
+  ],
+  components: [
+    {
+      id: 'sup',
+      type: 'acSupply',
+      label: '230 V AC supply with MCB',
+      position: [-4.3, 0, -0.2],
+      params: { V: 230, f: 50 },
+    },
+    {
+      id: 'va',
+      type: 'variac1ph',
+      label: 'Autotransformer',
+      position: [-2.6, 0, -0.15],
+      params: { Vin: 230, VoutMax: 270, kVA: 3 },
+    },
+    {
+      id: 'wm',
+      type: 'wattmeter',
+      label: 'Wattmeter',
+      position: [-0.8, 0, 0.8],
+      params: {
+        vRange: 300,
+        iRange: 10,
+        vRanges: [150, 300],
+        iRanges: [2.5, 5, 10],
+        divisions: 150,
+        pf: 1.0,
+      },
+    },
+    {
+      id: 'vp',
+      type: 'voltmeter',
+      label: 'V primary',
+      position: [-0.8, 0.36, -1.2],
+      params: { range: 300 },
+    },
+    {
+      id: 'tx',
+      type: 'transformer1ph',
+      label: 'Transformer 2 kVA 230/115 V',
+      position: [1.0, 0, -0.15],
+      params: { kVA: 2, V1: 230, V2: 115, I1rated: 8.7, I2rated: 17.39 },
+    },
+    {
+      id: 'vs',
+      type: 'voltmeter',
+      label: 'V secondary',
+      position: [2.75, 0.36, -1.2],
+      params: { range: 150 },
+    },
+    {
+      id: 'am',
+      type: 'ammeter',
+      label: 'A secondary',
+      position: [2.75, 0, 0.8],
+      params: { range: 25 },
+    },
+    {
+      id: 'ld',
+      type: 'lampLoad',
+      label: 'Lamp bank (12 x 200 W)',
+      position: [4.55, 0, -0.15],
+      params: { lamps: 12, wattsPerLamp: 200, Vrated: 115 },
+    },
+  ],
+  stages: [ex3_1Stage],
+  answers: [
+    {
+      id: 'regulationPct',
+      label: 'Voltage regulation (%)',
+      unit: '%',
+      kind: 'number',
+      placeholder: 'e.g. 2.32',
+      step: '0.01',
+      truth: (_rows, _model, params) => computeRunTruth(params).regulationPct,
+      tolerance: { abs: REGULATION_TOLERANCE_PP },
+      failMessage: 'Voltage regulation (%) is outside the acceptable tolerance.',
+      failHint: () =>
+        'Check Eq. 3.1.1: Regulation = (V2 no-load − V2 full-load) / 115 × 100 using rows held at V1 = 230 V.',
+    },
+    {
+      id: 'maxEffLoadPct',
+      label: 'Load at max efficiency (% of rated 2 kVA)',
+      unit: '%',
+      kind: 'number',
+      placeholder: 'e.g. 66',
+      step: '0.1',
+      truth: (_rows, _model, params) => computeRunTruth(params).maxEffLoadPct,
+      tolerance: { abs: MAX_EFF_LOAD_TOLERANCE_PP },
+      failMessage:
+        'Load at maximum efficiency (% of 2 kVA) is outside the acceptable tolerance.',
+      failHint: () =>
+        'Read the VA load at the peak of the efficiency curve and divide by 2000 VA × 100%.',
     },
   ],
   hints: [
@@ -565,4 +717,10 @@ export const ex3_1: ExperimentDef = {
   ],
   solutionNote:
     'Shown: canonical connection (a) with wattmeter V1 tied to M. Connection (b) with V1 tied to L is also valid.',
+  get learnSteps() {
+    return ex3_1Stage.learnSteps;
+  },
+  get faultPatterns() {
+    return ex3_1Stage.faultPatterns;
+  },
 };
