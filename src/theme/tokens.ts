@@ -38,11 +38,11 @@ export interface ThemeTokens {
 }
 
 /**
- * High-contrast net wire colors (>= 3:1 contrast against both dark #271f19
- * and light #eef2f6 benches).
+ * High-contrast net wire colors (>= 3:1 contrast against both dark #332a23
+ * and light #f1f5f9 benches).
  */
 export const NET_WIRE_COLORS = [
-  '#e11d48', // crimson
+  '#f43f5e', // rose-crimson
   '#3b82f6', // cobalt blue
   '#c26a06', // deep amber
   '#059669', // emerald
@@ -69,21 +69,21 @@ export const THEME_TOKENS: Record<ResolvedTheme, ThemeTokens> = {
       tooltipBorder: '#475569',
     },
     scene: {
-      background: '#0f172a',
-      fog: '#0f172a',
-      floor: '#0b1120',
-      benchTop: '#271f19',
+      background: '#131c2e',
+      fog: '#131c2e',
+      floor: '#0f172a',
+      benchTop: '#332a23',
       benchEdge: '#64748b',
       benchLegs: '#1e293b',
       ambientColor: '#ffffff',
-      ambientIntensity: 0.72,
+      ambientIntensity: 0.78,
       hemisphereSky: '#e2e8f0',
       hemisphereGround: '#334155',
-      hemisphereIntensity: 0.52,
+      hemisphereIntensity: 0.56,
       keyLightColor: '#fffbeb',
       keyLightIntensity: 1.55,
-      fillLightColor: '#93c5fd',
-      fillLightIntensity: 0.48,
+      fillLightColor: '#cbd5e1',
+      fillLightIntensity: 0.65,
     },
   },
   light: {
@@ -103,7 +103,7 @@ export const THEME_TOKENS: Record<ResolvedTheme, ThemeTokens> = {
       background: '#dbe4ee',
       fog: '#dbe4ee',
       floor: '#cbd5e1',
-      benchTop: '#eef2f6',
+      benchTop: '#f1f5f9',
       benchEdge: '#94a3b8',
       benchLegs: '#475569',
       ambientColor: '#ffffff',
@@ -114,7 +114,7 @@ export const THEME_TOKENS: Record<ResolvedTheme, ThemeTokens> = {
       keyLightColor: '#ffffff',
       keyLightIntensity: 1.45,
       fillLightColor: '#bae6fd',
-      fillLightIntensity: 0.42,
+      fillLightIntensity: 0.45,
     },
   },
 };

@@ -13,24 +13,7 @@ interface TerminalProps {
   terminal: TerminalDef;
 }
 
-function getTerminalRingColor(name: string): string {
-  if (
-    name === 'N' ||
-    name === 'IN_N' ||
-    name === 'OUT_N' ||
-    name === 'V2' ||
-    name === 'P2' ||
-    name === 'S2' ||
-    name === 'B' ||
-    name === 'OUT'
-  ) {
-    return '#1e293b'; // neutral / return / COM
-  }
-  if (name === 'V1' || name === 'L' || name === 'OUT_P') {
-    return '#eab308'; // instrument / variable tap
-  }
-  return '#dc2626'; // live / phase / M / P1 / S1 / A / IN
-}
+const UNIFORM_TERMINAL_COLOR = '#334155';
 
 export function Terminal({
   componentId,
@@ -47,7 +30,7 @@ export function Terminal({
   const supplyOn = useControlsStore((s) => s.supplyOn);
 
   const isSelected = selectedTerminal === fullId;
-  const ringColor = getTerminalRingColor(terminal.name);
+  const ringColor = UNIFORM_TERMINAL_COLOR;
 
   return (
     <group position={terminal.localPos}>

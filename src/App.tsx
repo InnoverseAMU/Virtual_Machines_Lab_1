@@ -89,7 +89,7 @@ export function App() {
   }, [clearSelectedTerminal, toggleTerminalLabels]);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden select-none">
+    <div className="fixed inset-0 overflow-hidden select-none">
       <BenchScene />
 
       {/* Top bar: camera presets, theme toggle, terminal labels toggle, status */}

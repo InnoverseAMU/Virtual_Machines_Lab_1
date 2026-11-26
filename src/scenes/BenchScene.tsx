@@ -18,11 +18,11 @@ const CAMERA_PRESETS: Record<
   CameraPreset,
   { pos: [number, number, number]; target: [number, number, number] }
 > = {
-  overview: { pos: [0.2, 4.8, 7.2], target: [0.2, 0.35, -0.1] },
-  supply: { pos: [-3.35, 2.3, 3.1], target: [-3.35, 0.4, -0.35] },
-  meters: { pos: [-0.8, 2.6, 3.3], target: [-0.8, 0.35, -0.15] },
-  transformer: { pos: [1.0, 2.5, 3.1], target: [1.0, 0.45, -0.3] },
-  load: { pos: [3.6, 2.6, 3.4], target: [3.6, 0.4, -0.1] },
+  overview: { pos: [0.15, 5.7, 5.2], target: [0.15, 0.25, -0.15] },
+  supply: { pos: [-3.45, 2.5, 3.0], target: [-3.45, 0.35, -0.15] },
+  meters: { pos: [0.95, 3.1, 3.3], target: [0.95, 0.4, -0.2] },
+  transformer: { pos: [1.0, 2.6, 2.8], target: [1.0, 0.45, -0.15] },
+  load: { pos: [3.65, 2.8, 3.1], target: [3.65, 0.4, -0.15] },
 };
 
 function tweenColor(
@@ -197,7 +197,7 @@ function ThemedEnvironment({
   return (
     <>
       <color attach="background" args={[initialTokens.background]} />
-      <fog attach="fog" args={[initialTokens.fog, 14, 30]} />
+      <fog attach="fog" args={[initialTokens.fog, 18, 42]} />
 
       <ambientLight
         ref={ambientRef}
@@ -226,9 +226,10 @@ function ThemedEnvironment({
         shadow-camera-bottom={-5}
         shadow-bias={-0.0004}
       />
+      {/* Subtle rim/back light to separate dark apparatus from the benchtop */}
       <directionalLight
         ref={fillRef}
-        position={[-6, 4, -4]}
+        position={[0, 4.5, -6]}
         color={initialTokens.fillLightColor}
         intensity={initialTokens.fillLightIntensity}
       />
@@ -299,11 +300,12 @@ export function BenchScene({ labOutput }: BenchSceneProps) {
     <Canvas
       shadows
       dpr={[1, 2]}
+      style={{ display: 'block', width: '100%', height: '100%' }}
       camera={{
         position: CAMERA_PRESETS.overview.pos,
-        fov: 42,
+        fov: 40,
         near: 0.1,
-        far: 60,
+        far: 80,
       }}
       gl={{
         toneMapping: THREE.ACESFilmicToneMapping,
@@ -324,27 +326,27 @@ export function BenchScene({ labOutput }: BenchSceneProps) {
       {/* Lab benchtop */}
       <group>
         <mesh
-          position={[0.1, -0.09, -0.05]}
+          position={[0.15, -0.09, -0.15]}
           receiveShadow
           castShadow
           material={benchMaterials.benchTopMat}
         >
-          <boxGeometry args={[11.4, 0.18, 3.5]} />
+          <boxGeometry args={[11.8, 0.18, 4.3]} />
         </mesh>
         {/* Front bench edge trim */}
         <mesh
-          position={[0.1, -0.09, 1.71]}
+          position={[0.15, -0.09, 2.01]}
           receiveShadow
           material={benchMaterials.benchEdgeMat}
         >
-          <boxGeometry args={[11.4, 0.18, 0.04]} />
+          <boxGeometry args={[11.8, 0.18, 0.04]} />
         </mesh>
         {/* Bench legs */}
         {[
-          [-5.2, -1.18, -1.5],
-          [5.4, -1.18, -1.5],
-          [-5.2, -1.18, 1.4],
-          [5.4, -1.18, 1.4],
+          [-5.4, -1.18, -1.9],
+          [5.6, -1.18, -1.9],
+          [-5.4, -1.18, 1.7],
+          [5.6, -1.18, 1.7],
         ].map(([x, y, z], i) => (
           <mesh
             key={i}
@@ -363,17 +365,25 @@ export function BenchScene({ labOutput }: BenchSceneProps) {
           receiveShadow
           material={benchMaterials.floorMat}
         >
-          <planeGeometry args={[40, 40]} />
+          <planeGeometry args={[80, 80]} />
         </mesh>
       </group>
 
-      {/* Apparatus */}
+      {/* Apparatus + generic risers for elevated rear instruments */}
       {experiment.components.map((comp) => (
-        <ComponentRenderer
-          key={comp.id}
-          instance={comp}
-          labOutput={labOutput}
-        />
+        <group key={comp.id}>
+          {comp.position[1] > 0.01 && (
+            <mesh
+              position={[comp.position[0], comp.position[1] / 2, comp.position[2]]}
+              castShadow
+              receiveShadow
+              material={benchMaterials.benchLegMat}
+            >
+              <boxGeometry args={[0.96, comp.position[1], 0.92]} />
+            </mesh>
+          )}
+          <ComponentRenderer instance={comp} labOutput={labOutput} />
+        </group>
       ))}
 
       {/* Student / solution wires */}
