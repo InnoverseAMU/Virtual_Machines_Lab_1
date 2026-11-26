@@ -10,6 +10,7 @@ export function ExperimentPicker() {
     (s) => s.usedSolutionByExperiment,
   );
   const learnCompleted = useSessionStore((s) => s.learnCompleted);
+  const runCompleted = useSessionStore((s) => s.runCompleted);
   const selectExperiment = useSessionStore((s) => s.selectExperiment);
   const goToScreen = useSessionStore((s) => s.goToScreen);
 
@@ -21,6 +22,7 @@ export function ExperimentPicker() {
   const renderCard = (exp: ExperimentSummary) => {
     const isCompleted = completedExperiments.includes(exp.id);
     const isLearnDone = Boolean(learnCompleted[exp.id]);
+    const isRunDone = Boolean(runCompleted[exp.id]);
     const attemptCount = attempts[exp.id] ?? 0;
     const usedSol = Boolean(usedSolutionByExperiment[exp.id]);
 
@@ -111,6 +113,11 @@ export function ExperimentPicker() {
                   }}
                 >
                   Learn completed
+                </span>
+              )}
+              {isRunDone && (
+                <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
+                  Run completed
                 </span>
               )}
               {usedSol && (

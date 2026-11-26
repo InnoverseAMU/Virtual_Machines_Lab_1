@@ -47,7 +47,7 @@ export function LearnPlayer({
   return (
     <section
       aria-label="Guided walkthrough"
-      className="pointer-events-auto absolute inset-x-2 bottom-14 z-20 rounded-2xl p-3.5 shadow-2xl backdrop-blur md:inset-x-auto md:bottom-3 md:left-3 md:w-[360px] md:p-4"
+      className="pointer-events-auto absolute right-2 bottom-14 left-2 z-20 max-w-[calc(100%-1rem)] rounded-2xl p-3.5 shadow-2xl backdrop-blur md:right-auto md:bottom-3 md:left-3 md:w-[360px] md:max-w-[calc(100%-1.5rem)] md:p-4"
       style={{
         backgroundColor: 'var(--vml-panel)',
         border: '1px solid var(--vml-border)',

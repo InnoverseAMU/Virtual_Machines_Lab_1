@@ -1,9 +1,20 @@
 import { create } from 'zustand';
 import { validateWiring } from '../core/circuit/validate';
 import { getExperiment } from '../core/experiments/registry';
+import { extractTransformerParams } from '../core/physics/models/transformerLoad';
+import {
+  captureObservationRow,
+  checkRunAnswers,
+  computeRunTruth,
+  MAX_OBSERVATION_ROWS,
+} from '../core/physics/report';
 import type {
   CameraPreset,
+  ObservationRow,
+  RunCheckResult,
   RuntimeEvent,
+  TransformerLoadControls,
+  TransformerLoadOutput,
   ValidationResult,
   Wire,
 } from '../core/types';
@@ -36,6 +47,7 @@ interface StoredProgress {
   completedExperiments: string[];
   usedSolutionByExperiment: Record<string, boolean>;
   learnCompleted: Record<string, boolean>;
+  runCompleted: Record<string, boolean>;
 }
 
 function loadProgress(): StoredProgress {
@@ -47,6 +59,7 @@ function loadProgress(): StoredProgress {
         completedExperiments: [],
         usedSolutionByExperiment: {},
         learnCompleted: {},
+        runCompleted: {},
       };
     }
     const parsed = JSON.parse(raw) as Partial<StoredProgress>;
@@ -67,6 +80,10 @@ function loadProgress(): StoredProgress {
         parsed.learnCompleted && typeof parsed.learnCompleted === 'object'
           ? parsed.learnCompleted
           : {},
+      runCompleted:
+        parsed.runCompleted && typeof parsed.runCompleted === 'object'
+          ? parsed.runCompleted
+          : {},
     };
   } catch {
     return {
@@ -74,6 +91,7 @@ function loadProgress(): StoredProgress {
       completedExperiments: [],
       usedSolutionByExperiment: {},
       learnCompleted: {},
+      runCompleted: {},
     };
   }
 }
@@ -89,6 +107,8 @@ function saveProgress(progress: StoredProgress): void {
 export type AppScreen = 'picker' | 'mode' | 'lab';
 export type LabMode = 'self' | 'learn';
 
+let rowCounter = 0;
+
 interface SessionState {
   screen: AppScreen;
   experimentId: string;
@@ -97,6 +117,7 @@ interface SessionState {
   completedExperiments: string[];
   usedSolutionByExperiment: Record<string, boolean>;
   learnCompleted: Record<string, boolean>;
+  runCompleted: Record<string, boolean>;
 
   // Self mode per-run state (never persisted)
   hintLevel: number;
@@ -104,6 +125,12 @@ interface SessionState {
   validationResult: ValidationResult | null;
   resultModalOpen: boolean;
   showingSolution: boolean;
+
+  // Observations & run report state (never persisted)
+  observationRows: ObservationRow[];
+  runRegulationInput: string;
+  runMaxEffLoadInput: string;
+  runCheckResult: RunCheckResult | null;
 
   // Learn mode per-run state (never persisted mid-lesson)
   learnStepIndex: number;
@@ -134,6 +161,18 @@ interface SessionState {
   activateSolutionView: () => void;
   exitSolutionView: () => void;
 
+  addObservationRow: (
+    output: TransformerLoadOutput,
+    controls: TransformerLoadControls,
+    primaryEnergised: boolean,
+  ) => void;
+  deleteObservationRow: (id: string) => void;
+  clearObservationRows: () => void;
+  setRunRegulationInput: (val: string) => void;
+  setRunMaxEffLoadInput: (val: string) => void;
+  submitRunAnswers: () => RunCheckResult;
+  clearRunCheckResult: () => void;
+
   setLearnStepIndex: (index: number) => void;
   ackLearnReading: () => void;
   resetLearnAck: () => void;
@@ -156,12 +195,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   completedExperiments: initialProgress.completedExperiments,
   usedSolutionByExperiment: initialProgress.usedSolutionByExperiment,
   learnCompleted: initialProgress.learnCompleted,
+  runCompleted: initialProgress.runCompleted,
 
   hintLevel: 0,
   usedSolutionInRun: false,
   validationResult: null,
   resultModalOpen: false,
   showingSolution: false,
+
+  observationRows: [],
+  runRegulationInput: '',
+  runMaxEffLoadInput: '',
+  runCheckResult: null,
 
   learnStepIndex: 0,
   learnNoLoadAck: false,
@@ -187,6 +232,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       validationResult: null,
       resultModalOpen: false,
       showingSolution: false,
+      observationRows: [],
+      runRegulationInput: '',
+      runMaxEffLoadInput: '',
+      runCheckResult: null,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -228,6 +277,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       usedSolutionByExperiment,
       usedSolutionInRun,
       learnCompleted,
+      runCompleted,
     } = get();
     const experiment = getExperiment(experimentId);
     const result = validateWiring(experiment, wires);
@@ -255,6 +305,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       completedExperiments: nextCompleted,
       usedSolutionByExperiment: nextUsedSolution,
       learnCompleted,
+      runCompleted,
     });
 
     set({
@@ -299,6 +350,104 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   exitSolutionView: () => set({ showingSolution: false }),
 
+  addObservationRow: (output, controls, primaryEnergised) => {
+    const { observationRows, pushToast } = get();
+    if (!controls.supplyOn || !primaryEnergised) return;
+    if (observationRows.length >= MAX_OBSERVATION_ROWS) return;
+
+    rowCounter += 1;
+    const row = captureObservationRow(
+      output,
+      controls,
+      observationRows.length + 1,
+      `obs_${rowCounter}`,
+    );
+
+    if (row.v1OutOfRange) {
+      pushToast({
+        id: 'obs-v1-range',
+        severity: 'warning',
+        message: `Row ${row.sno} recorded with V1 = ${row.v1.toFixed(1)} V (outside 230 ± 2 V).`,
+      });
+    }
+
+    set({
+      observationRows: [...observationRows, row],
+      runCheckResult: null,
+    });
+  },
+
+  deleteObservationRow: (id) =>
+    set((state) => {
+      const next = state.observationRows
+        .filter((r) => r.id !== id)
+        .map((r, idx) => ({ ...r, sno: idx + 1 }));
+      return {
+        observationRows: next,
+        runCheckResult: null,
+      };
+    }),
+
+  clearObservationRows: () =>
+    set({
+      observationRows: [],
+      runCheckResult: null,
+    }),
+
+  setRunRegulationInput: (runRegulationInput) => set({ runRegulationInput }),
+
+  setRunMaxEffLoadInput: (runMaxEffLoadInput) => set({ runMaxEffLoadInput }),
+
+  submitRunAnswers: () => {
+    const {
+      experimentId,
+      observationRows,
+      runRegulationInput,
+      runMaxEffLoadInput,
+      attempts,
+      completedExperiments,
+      usedSolutionByExperiment,
+      learnCompleted,
+      runCompleted,
+    } = get();
+
+    const experiment = getExperiment(experimentId);
+    const truth = computeRunTruth(
+      extractTransformerParams(experiment.physicsParams),
+    );
+    const regulationPct = Number.parseFloat(runRegulationInput);
+    const maxEffLoadPct = Number.parseFloat(runMaxEffLoadInput);
+
+    const result = checkRunAnswers(
+      observationRows,
+      { regulationPct, maxEffLoadPct },
+      truth,
+    );
+
+    let nextRunCompleted = runCompleted;
+    if (result.passed) {
+      nextRunCompleted = {
+        ...runCompleted,
+        [experimentId]: true,
+      };
+      saveProgress({
+        attempts,
+        completedExperiments,
+        usedSolutionByExperiment,
+        learnCompleted,
+        runCompleted: nextRunCompleted,
+      });
+    }
+
+    set({
+      runCompleted: nextRunCompleted,
+      runCheckResult: result,
+    });
+    return result;
+  },
+
+  clearRunCheckResult: () => set({ runCheckResult: null }),
+
   setLearnStepIndex: (learnStepIndex) => set({ learnStepIndex }),
 
   ackLearnReading: () => set({ learnNoLoadAck: true }),
@@ -312,6 +461,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       completedExperiments,
       usedSolutionByExperiment,
       learnCompleted,
+      runCompleted,
     } = get();
     const nextLearnCompleted = {
       ...learnCompleted,
@@ -322,6 +472,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       completedExperiments,
       usedSolutionByExperiment,
       learnCompleted: nextLearnCompleted,
+      runCompleted,
     });
     set({
       learnCompleted: nextLearnCompleted,
@@ -358,6 +509,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       validationResult: null,
       resultModalOpen: false,
       showingSolution: false,
+      observationRows: [],
+      runRegulationInput: '',
+      runMaxEffLoadInput: '',
+      runCheckResult: null,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,

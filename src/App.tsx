@@ -456,9 +456,9 @@ export function App() {
   const learnControlsLocked = isLearn && learnStepIndex < 11;
 
   return (
-    <div className="fixed inset-0 flex overflow-hidden select-none">
+    <div className="fixed inset-0 flex overflow-x-clip overflow-y-hidden select-none">
       {/* Main 3D canvas area resizes smoothly when sidebar opens/closes */}
-      <div className="relative h-full min-w-0 flex-1 overflow-hidden">
+      <div className="relative h-full min-w-0 flex-1 overflow-x-clip overflow-y-hidden">
         <BenchScene
           labOutput={evaluation.output}
           connectionState={evaluation.connectionState}
@@ -711,8 +711,10 @@ export function App() {
       </div>
 
       <RightSidebar
+        experiment={experiment}
         controls={experiment.controls}
         output={evaluation.output}
+        primaryEnergised={evaluation.connectionState.primaryEnergised}
         controlsLocked={learnControlsLocked}
       />
 

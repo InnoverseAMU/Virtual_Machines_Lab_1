@@ -288,3 +288,42 @@ export interface TransformerLoadOutput {
   };
   events: RuntimeEvent[];
 }
+
+export interface ObservationRow {
+  id: string;
+  sno: number;
+  v1: number;
+  i2: number;
+  v2: number;
+  dial: number;
+  mf: number;
+  p1: number;
+  lamps: number;
+  v1OutOfRange: boolean;
+}
+
+export interface RunAnswers {
+  regulationPct: number;
+  maxEffLoadPct: number;
+}
+
+export interface RunTruth {
+  regulationPct: number;
+  maxEffLoadPct: number;
+  v2NoLoad: number;
+  v2FullLoad: number;
+}
+
+export interface RunPrerequisites {
+  rowCount: number;
+  hasMinRows: boolean;
+  hasNoLoadRow: boolean;
+  hasRatedRow: boolean;
+  allMet: boolean;
+}
+
+export interface RunCheckResult {
+  passed: boolean;
+  failedCriteria: string[];
+  hints: string[];
+}
