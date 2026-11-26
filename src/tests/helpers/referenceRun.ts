@@ -1,5 +1,6 @@
 import { findVariacForTargetV1 } from '../../core/circuit/learn';
 import { collectInternalLinks, wiresFromNetlist } from '../../core/circuit/nets';
+import { STAGE2_REQUIRED_PAIRS } from '../../core/experiments/ex3_6';
 import { getStage, getStageComponents } from '../../core/circuit/stages';
 import {
   getCanonicalStageNetsForSeed,
@@ -562,6 +563,91 @@ const DEFAULT_PROCEDURES: Record<
         sampleDiffPhasesHigh: 86.6,
         sampleSamePhaseLow: 0,
         sampleSamePhaseHigh: 100,
+      };
+    },
+  },
+  'ex3.6': {
+    runStage: ({ experiment, stageIndex, seed, gains }) => {
+      const stage = getStage(experiment, stageIndex);
+      const wires = wiresFromNetlist(stage.acceptedNetlists[0], []);
+
+      if (stage.id === 'three-to-six') {
+        return STAGE2_REQUIRED_PAIRS.map(([probeA, probeB], idx) => {
+          const controls: ControlValues = {
+            'sup3.switch': true,
+            'va3.knob': 230,
+            'probe.a': probeA,
+            'probe.b': probeB,
+          };
+          const { output } = evaluateExperimentPhysics(
+            experiment,
+            wires,
+            controls,
+            gains,
+            { stageIndex, seed },
+          );
+          return captureObservationRow(stage, output, controls, idx + 1, `p36_s2_${idx + 1}`);
+        });
+      }
+
+      const [probeA, probeB] =
+        stage.id === 'three-to-single'
+          ? ['tx.a1', 'tx.c1']
+          : ['txT.a1', 'txM.b1'];
+      const controls: ControlValues = {
+        'sup3.switch': true,
+        'va3.knob': 230,
+        'probe.a': probeA,
+        'probe.b': probeB,
+      };
+      const { output } = evaluateExperimentPhysics(
+        experiment,
+        wires,
+        controls,
+        gains,
+        { stageIndex, seed },
+      );
+      return [captureObservationRow(stage, output, controls, 1, `p36_${stage.id}_1`)];
+    },
+    computeAnswers: (rowsByStage) => {
+      const s1 = rowsByStage['three-to-single'] ?? [];
+      const s2 = rowsByStage['three-to-six'] ?? [];
+      const s3 = rowsByStage['three-to-two-scott'] ?? [];
+
+      const singlePhaseOutputV = getRowNumber(s1[0], 'Va1c1');
+      const avgVp1 =
+        (getRowNumber(s1[0], 'Va1a4') +
+          getRowNumber(s1[0], 'Vb1b4') +
+          getRowNumber(s1[0], 'Vc1c4')) /
+        3;
+      const singlePhaseMultiple = singlePhaseOutputV / Math.max(1, avgVp1);
+
+      const phaseVals = s2.slice(0, 6).map((r) => getRowNumber(r, 'probeV'));
+      const adjVals = s2.slice(6, 12).map((r) => getRowNumber(r, 'probeV'));
+      const sixPhasePhaseV =
+        phaseVals.reduce((a, b) => a + b, 0) / Math.max(1, phaseVals.length);
+      const sixPhaseLineV =
+        adjVals.reduce((a, b) => a + b, 0) / Math.max(1, adjVals.length);
+      const sixPhaseOppositeV = sixPhasePhaseV * 2;
+
+      const scottVamV = getRowNumber(s3[0], 'VA1A2');
+      const scottSecPhaseV =
+        (getRowNumber(s3[0], 'Va1a2') + getRowNumber(s3[0], 'Vb1b2')) / 2;
+      const scottVa1b1V = getRowNumber(s3[0], 'Va1b1');
+
+      return {
+        singlePhaseOutputV,
+        singlePhaseMultiple,
+        sixPhasePhaseV,
+        sixPhaseLineV,
+        sixPhaseOppositeV,
+        sixPhaseAdjAngle: '60',
+        scottVamV,
+        scottSecPhaseV,
+        scottVa1b1V,
+        scott400to100MainRatio: 4,
+        scott400to100TeaserRatio: 3.464,
+        scottIronLossesEqual: 'yes',
       };
     },
   },

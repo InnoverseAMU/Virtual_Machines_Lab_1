@@ -12,6 +12,7 @@ export function Transformer({ instance }: TransformerProps) {
   const pPlate = String(instance.params.pPlate ?? 'PRIMARY 230 V');
   const sPlate = String(instance.params.sPlate ?? 'SECONDARY 115 V');
   const titlePlate = String(instance.params.titlePlate ?? 'TRANSFORMER 2 kVA');
+  const subPlate = String(instance.params.subPlate ?? '230 V / 115 V · 50 Hz');
 
   return (
     <group position={instance.position}>
@@ -41,7 +42,7 @@ export function Transformer({ instance }: TransformerProps) {
 
       <LabelPlate
         text={titlePlate}
-        subtext="230 V / 115 V · 50 Hz"
+        subtext={subPlate}
         width={0.94}
         height={0.18}
         fontSize={34}

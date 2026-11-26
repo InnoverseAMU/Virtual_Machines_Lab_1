@@ -4,6 +4,7 @@ import { ex3_2 } from './ex3_2';
 import { ex3_3 } from './ex3_3';
 import { ex3_4 } from './ex3_4';
 import { ex3_5 } from './ex3_5';
+import { ex3_6 } from './ex3_6';
 import { ExperimentDefSchema } from './schema';
 import type {
   ExperimentDef,
@@ -13,7 +14,7 @@ import type {
   WireEndpointPair,
 } from '../types';
 
-const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1, ex3_2, ex3_3, ex3_4, ex3_5];
+const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1, ex3_2, ex3_3, ex3_4, ex3_5, ex3_6];
 
 export const EXPERIMENTS: Record<string, ExperimentDef> = Object.fromEntries(
   RAW_EXPERIMENTS.map((exp) => {
@@ -63,7 +64,7 @@ export const EXPERIMENT_SUMMARIES: ExperimentSummary[] = [
     number: '3.6',
     title: 'Phase-transformation',
     group: 'transformers',
-    available: false,
+    available: true,
   },
   {
     id: 'ex4.1',

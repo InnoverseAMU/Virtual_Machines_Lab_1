@@ -32,6 +32,9 @@ const ComponentTypeSchema = z.enum([
   'wattmeter',
   'transformer1ph',
   'transformer3ph',
+  'transformer3phTrue',
+  'transformerCenterTap',
+  'transformerTeaser',
   'voltmeter',
   'probeVoltmeter',
   'ammeter',
@@ -310,7 +313,7 @@ export const ExperimentDefSchema = z
     charts: z.array(ChartSpecSchema).optional(),
     hints: z.array(z.string().min(1)),
     solutionNote: z.string().min(1),
-    phasorReport: z.boolean().optional(),
+    phasorReport: z.union([z.boolean(), z.enum(['connections', 'transformations'])]).optional(),
   })
   .superRefine((exp, ctx) => {
     const compIds = new Set(exp.components.map((c) => c.id));

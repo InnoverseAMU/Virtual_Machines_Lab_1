@@ -18,6 +18,9 @@ export type ComponentType =
   | 'wattmeter'
   | 'transformer1ph'
   | 'transformer3ph'
+  | 'transformer3phTrue'
+  | 'transformerCenterTap'
+  | 'transformerTeaser'
   | 'voltmeter'
   | 'probeVoltmeter'
   | 'ammeter'
@@ -361,7 +364,7 @@ export interface ExperimentDef {
   charts?: ChartSpec[];
   hints: string[];
   solutionNote: string;
-  phasorReport?: boolean;
+  phasorReport?: boolean | 'connections' | 'transformations';
 }
 
 export interface ExperimentSummary {

@@ -184,7 +184,11 @@ export function ComponentRenderer({
       );
     }
     case 'transformer1ph':
+    case 'transformerCenterTap':
+    case 'transformerTeaser':
       return <Transformer instance={instance} />;
+    case 'transformer3phTrue':
+      return <Transformer3ph instance={instance} />;
     case 'transformer3ph': {
       const labelMap = resolveScrambledTerminalLabels(
         sessionSeed,

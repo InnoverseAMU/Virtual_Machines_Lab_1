@@ -1,4 +1,5 @@
 import type { PhysicsModel } from '../types';
+import { phaseTransformationModel } from './models/phaseTransformation';
 import { phasorConnectionsModel } from './models/phasorConnections';
 import { sumpnerModel } from './models/sumpner';
 import { transformerLoadModel } from './models/transformerLoad';
@@ -11,6 +12,7 @@ const MODEL_REGISTRY = new Map<string, PhysicsModel>([
   [sumpnerModel.id, sumpnerModel as unknown as PhysicsModel],
   [transformerParallelModel.id, transformerParallelModel as unknown as PhysicsModel],
   [phasorConnectionsModel.id, phasorConnectionsModel as unknown as PhysicsModel],
+  [phaseTransformationModel.id, phaseTransformationModel as unknown as PhysicsModel],
 ]);
 
 export function registerPhysicsModel(model: PhysicsModel): void {

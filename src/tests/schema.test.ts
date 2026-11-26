@@ -79,10 +79,10 @@ describe('Experiment schema and terminal integrity', () => {
     expect(netATerminals.size).toBe(ex31Terminals.size);
   });
 
-  it('registry lists all 9 manual experiments with exact ids, titles, and ex3.1..ex3.5 available', () => {
+  it('registry lists all 9 manual experiments with exact ids, titles, and ex3.1..ex3.6 available', () => {
     expect(EXPERIMENT_SUMMARIES).toHaveLength(9);
     const available = EXPERIMENT_SUMMARIES.filter((e) => e.available);
-    expect(available.map((e) => e.id)).toEqual(['ex3.1', 'ex3.2', 'ex3.3', 'ex3.4', 'ex3.5']);
+    expect(available.map((e) => e.id)).toEqual(['ex3.1', 'ex3.2', 'ex3.3', 'ex3.4', 'ex3.5', 'ex3.6']);
 
     const expected: Array<[string, string, string]> = [
       ['ex3.1', '3.1', 'Load test of single-phase transformer'],
