@@ -132,6 +132,7 @@ const LearnStepSchema = z.object({
   title: z.string().min(1),
   why: z.string().min(1),
   connectTerminals: z.array(TerminalPairSchema).optional(),
+  disconnectTerminals: z.array(TerminalPairSchema).optional(),
   completionCondition: LearnStepConditionSchema.optional(),
 });
 

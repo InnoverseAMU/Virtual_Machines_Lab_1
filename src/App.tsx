@@ -93,6 +93,7 @@ export function App() {
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
   const clearAllWires = useWiringStore((s) => s.clearAllWires);
   const addTutorialWire = useWiringStore((s) => s.addTutorialWire);
+  const removeTutorialWirePair = useWiringStore((s) => s.removeTutorialWirePair);
   const removeTutorialWiresFromStep = useWiringStore(
     (s) => s.removeTutorialWiresFromStep,
   );
@@ -176,6 +177,15 @@ export function App() {
     setCameraPreset(currentLearnStep.camera);
 
     clearWireTimers();
+    const disconnectPairs = currentLearnStep.disconnectTerminals ?? [];
+    if (disconnectPairs.length > 0) {
+      if (useControlsStore.getState().supplyOn) {
+        setControlValue('sup.switch', false);
+      }
+      for (const [a, b] of disconnectPairs) {
+        removeTutorialWirePair(a, b);
+      }
+    }
     const pairs = currentLearnStep.connectTerminals ?? [];
     if (pairs.length > 0) {
       if (useControlsStore.getState().supplyOn) {
@@ -203,6 +213,7 @@ export function App() {
     setCameraPreset,
     setControlValue,
     addTutorialWire,
+    removeTutorialWirePair,
     clearAllWiresScripted,
     clearWireTimers,
   ]);
@@ -217,12 +228,15 @@ export function App() {
       for (let i = 0; i <= upToIndex && i < learnSteps.length; i++) {
         const st = learnSteps[i];
         if (stageId && st.stageId !== stageId) continue;
+        for (const [a, b] of st.disconnectTerminals ?? []) {
+          removeTutorialWirePair(a, b);
+        }
         for (const [a, b] of st.connectTerminals ?? []) {
           addTutorialWire(a, b, i);
         }
       }
     },
-    [learnSteps, addTutorialWire],
+    [learnSteps, addTutorialWire, removeTutorialWirePair],
   );
 
   const handleLearnBack = useCallback(() => {
@@ -230,7 +244,9 @@ export function App() {
     clearWireTimers();
     const prevIdx = learnStepIndex - 1;
     const prevStep = learnSteps[prevIdx];
-    const leavingWireStep = Boolean(currentLearnStep?.connectTerminals?.length);
+    const leavingWireStep =
+      Boolean(currentLearnStep?.connectTerminals?.length) ||
+      Boolean(currentLearnStep?.disconnectTerminals?.length);
     const crossingPastCondition =
       learnStepIndex >= firstConditionIdx && prevIdx < firstConditionIdx;
     const crossingStage =
@@ -238,15 +254,23 @@ export function App() {
 
     if (leavingWireStep || crossingPastCondition || crossingStage) {
       setControlValue('sup.switch', false);
-      setControlValue('va.knob', 0);
-      setControlValue('ld.lamps', 0);
+      for (const ctrl of currentStage.controls) {
+        if (ctrl.kind === 'knob' || ctrl.kind === 'steps') {
+          setControlValue(ctrl.id, 0);
+        }
+      }
       clearMcbTrip();
       resetLearnAck();
-      removeTutorialWiresFromStep(prevIdx + 1);
-      if (crossingStage) {
-        const prevStageIdx = getStageIndexById(experiment, prevStep.stageId);
-        setCurrentStageIndex(prevStageIdx);
-        flushLearnStepWires(prevIdx, prevStep.stageId);
+      if (crossingStage || currentLearnStep?.disconnectTerminals?.length) {
+        clearAllWiresScripted();
+        const targetStageId = prevStep?.stageId ?? currentLearnStep?.stageId;
+        if (crossingStage) {
+          const prevStageIdx = getStageIndexById(experiment, prevStep.stageId);
+          setCurrentStageIndex(prevStageIdx);
+        }
+        flushLearnStepWires(prevIdx, targetStageId);
+      } else {
+        removeTutorialWiresFromStep(prevIdx + 1);
       }
     } else if (currentLearnStep?.completionCondition?.kind === 'no-load-ack') {
       resetLearnAck();
@@ -257,12 +281,14 @@ export function App() {
     learnStepIndex,
     learnSteps,
     currentLearnStep,
+    currentStage.controls,
     firstConditionIdx,
     experiment,
     clearWireTimers,
     setControlValue,
     clearMcbTrip,
     resetLearnAck,
+    clearAllWiresScripted,
     removeTutorialWiresFromStep,
     setCurrentStageIndex,
     flushLearnStepWires,
@@ -437,7 +463,7 @@ export function App() {
       } else if (
         isLearn &&
         !learnFinished &&
-        focusedControl !== 'va.knob' &&
+        !focusedControl?.endsWith('.knob') &&
         confirmAction === null &&
         e.key === 'ArrowRight'
       ) {
@@ -446,7 +472,7 @@ export function App() {
       } else if (
         isLearn &&
         !learnFinished &&
-        focusedControl !== 'va.knob' &&
+        !focusedControl?.endsWith('.knob') &&
         confirmAction === null &&
         e.key === 'ArrowLeft'
       ) {

@@ -121,10 +121,12 @@ export function computeWireCurrentFlows(
   const flows = new Map<string, WireFlowInfo>();
 
   const supplyOn = Boolean(controls['sup.switch']);
-  const variacV = Number(controls['va.knob'] ?? 0);
+  const anyKnobOn = Object.entries(controls).some(
+    ([k, v]) => k.endsWith('.knob') && Number(v) > 0,
+  );
   if (
     !supplyOn ||
-    variacV <= 0 ||
+    !anyKnobOn ||
     labOutput?.mcbTripped ||
     !connectionState?.energised
   ) {
@@ -134,15 +136,17 @@ export function computeWireCurrentFlows(
   const netGraph = buildNets(components, wires, controls);
   const compIds = new Set(components.map((c) => c.id));
   const byType = new Map(components.map((c) => [c.id, c.type]));
+  const transformers = components.filter((c) => c.type === 'transformer1ph');
+  const variacs = components.filter((c) => c.type === 'variac1ph');
 
   // Primary & secondary magnitudes from physics outputs (with safe positive fallbacks)
   const out = labOutput?.outputs ?? {};
   const primaryI = Math.max(
     0.05,
-    Math.abs(out.I1 ?? out.Io ?? out.Isc ?? out.I ?? 0.5),
+    Math.abs(out.I1 ?? out.Ip ?? out.Io ?? out.Isc ?? out.I ?? 0.5),
   );
   const secondaryI = Math.abs(
-    out.I2 ?? (out.Isc !== undefined ? Math.abs(out.Isc) * 2 : 0),
+    out.I2 ?? out.Is ?? (out.Isc !== undefined ? Math.abs(out.Isc) * 2 : 0),
   );
 
   const primaryAdj = new Map<TerminalId, DirectedEdge[]>();
@@ -167,6 +171,16 @@ export function computeWireCurrentFlows(
         `${comp.id}.OUT_N`,
         `${comp.id}.IN_N`,
       );
+      addDirectedInternalEdge(
+        secondaryAdj,
+        `${comp.id}.IN_P`,
+        `${comp.id}.OUT_P`,
+      );
+      addDirectedInternalEdge(
+        secondaryAdj,
+        `${comp.id}.OUT_N`,
+        `${comp.id}.IN_N`,
+      );
     } else if (comp.type === 'wattmeter') {
       addBidirectionalInternalEdge(primaryAdj, `${comp.id}.M`, `${comp.id}.L`);
       addBidirectionalInternalEdge(
@@ -186,7 +200,7 @@ export function computeWireCurrentFlows(
         `${comp.id}.OUT`,
       );
     } else if (comp.type === 'transformer1ph') {
-      // Primary path can drive either P1-P2 (Exp 3.1 / 3.2 SC) or S1-S2 (Exp 3.2 OC)
+      // Primary path can drive either P1-P2 (Exp 3.1 / 3.2 SC / 3.3) or S1-S2 (Exp 3.2 OC)
       addBidirectionalInternalEdge(
         primaryAdj,
         `${comp.id}.P1`,
@@ -197,6 +211,13 @@ export function computeWireCurrentFlows(
         `${comp.id}.S1`,
         `${comp.id}.S2`,
       );
+      if (variacs.length > 1) {
+        addBidirectionalInternalEdge(
+          secondaryAdj,
+          `${comp.id}.S1`,
+          `${comp.id}.S2`,
+        );
+      }
     } else if (comp.type === 'lampLoad') {
       const lamps = Number(controls[`${comp.id}.lamps`] ?? controls['ld.lamps'] ?? 0);
       if (lamps > 0) {
@@ -214,21 +235,96 @@ export function computeWireCurrentFlows(
     }
   }
 
-  // Trace primary loop: sup.P -> ... -> sup.N (preventing direct bypass on IN_N->OUT_N or vice versa)
   const hasSup = compIds.has('sup') && byType.get('sup') === 'acSupply';
+
+  // Multi-variac / multi-transformer bench (e.g. Sumpner's back-to-back test)
+  if (variacs.length > 1 && hasSup) {
+    for (const va of variacs) {
+      const vaKnob = Number(controls[`${va.id}.knob`] ?? 0);
+      if (vaKnob <= 0) continue;
+
+      // Determine whether this variac feeds HV primaries or LV secondaries
+      const isSecondaryVariac =
+        va.id === 'vaS' ||
+        transformers.some((tx) =>
+          netGraph.areConnected(`${va.id}.OUT_P`, `${tx.id}.S1`) ||
+          netGraph.areConnected(`${va.id}.OUT_P`, `${tx.id}.S2`),
+        );
+
+      const blocked = new Set<string>();
+      for (const other of variacs) {
+        if (other.id !== va.id) {
+          blocked.add(`${other.id}.IN_P->${other.id}.OUT_P`);
+          blocked.add(`${other.id}.OUT_N->${other.id}.IN_N`);
+        }
+      }
+
+      if (isSecondaryVariac) {
+        if (secondaryI <= 0.005) continue;
+        for (const tx of transformers) {
+          blocked.add(`${tx.id}.P1->${tx.id}.P2`);
+          blocked.add(`${tx.id}.P2->${tx.id}.P1`);
+        }
+        markShortestFlowPath(
+          secondaryAdj,
+          'sup.P',
+          'sup.N',
+          secondaryI,
+          flows,
+          blocked,
+        );
+      } else {
+        for (const tx of transformers) {
+          blocked.add(`${tx.id}.S1->${tx.id}.S2`);
+          blocked.add(`${tx.id}.S2->${tx.id}.S1`);
+        }
+        if (transformers.length > 1) {
+          for (const targetTx of transformers) {
+            const perTxBlocked = new Set(blocked);
+            for (const otherTx of transformers) {
+              if (otherTx.id !== targetTx.id) {
+                perTxBlocked.add(`${otherTx.id}.P1->${otherTx.id}.P2`);
+                perTxBlocked.add(`${otherTx.id}.P2->${otherTx.id}.P1`);
+              }
+            }
+            markShortestFlowPath(
+              primaryAdj,
+              'sup.P',
+              'sup.N',
+              primaryI / transformers.length,
+              flows,
+              perTxBlocked,
+            );
+          }
+        } else {
+          markShortestFlowPath(
+            primaryAdj,
+            'sup.P',
+            'sup.N',
+            primaryI,
+            flows,
+            blocked,
+          );
+        }
+      }
+    }
+    return flows;
+  }
+
+  // Single-variac bench (Exp 3.1, Exp 3.2, Stage 1 of Exp 3.3)
   if (hasSup) {
-    // If transformer has both windings wired on distinct nets, determine which winding is fed by primary
     const blockedPrimary = new Set<string>();
-    const txComp = components.find((c) => c.type === 'transformer1ph');
-    if (txComp) {
+    for (const txComp of transformers) {
       const s1OnSourceSide =
         netGraph.areConnected('va.OUT_P', `${txComp.id}.S1`) ||
-        netGraph.areConnected('tx.S2', 'sup.N');
+        netGraph.areConnected(`${txComp.id}.S2`, 'sup.N');
       const p1OnSourceSide =
         netGraph.areConnected('va.OUT_P', `${txComp.id}.P1`) ||
-        netGraph.areConnected('wm.L', `${txComp.id}.P1`);
+        netGraph.areConnected('vaP.OUT_P', `${txComp.id}.P1`) ||
+        netGraph.areConnected('wm.L', `${txComp.id}.P1`) ||
+        netGraph.areConnected('wp.L', `${txComp.id}.P1`) ||
+        netGraph.areConnected('ap.OUT', `${txComp.id}.P1`);
       if (p1OnSourceSide && !s1OnSourceSide) {
-        // Primary is HV (P1/P2): don't route primary path through S1<->S2
         blockedPrimary.add(`${txComp.id}.S1->${txComp.id}.S2`);
         blockedPrimary.add(`${txComp.id}.S2->${txComp.id}.S1`);
       } else if (s1OnSourceSide && !p1OnSourceSide) {
@@ -237,28 +333,45 @@ export function computeWireCurrentFlows(
       }
     }
 
-    markShortestFlowPath(
-      primaryAdj,
-      'sup.P',
-      'sup.N',
-      primaryI,
-      flows,
-      blockedPrimary,
-    );
+    if (transformers.length > 1) {
+      for (const targetTx of transformers) {
+        const perTxBlocked = new Set(blockedPrimary);
+        for (const otherTx of transformers) {
+          if (otherTx.id !== targetTx.id) {
+            perTxBlocked.add(`${otherTx.id}.P1->${otherTx.id}.P2`);
+            perTxBlocked.add(`${otherTx.id}.P2->${otherTx.id}.P1`);
+          }
+        }
+        markShortestFlowPath(
+          primaryAdj,
+          'sup.P',
+          'sup.N',
+          primaryI / transformers.length,
+          flows,
+          perTxBlocked,
+        );
+      }
+    } else {
+      markShortestFlowPath(
+        primaryAdj,
+        'sup.P',
+        'sup.N',
+        primaryI,
+        flows,
+        blockedPrimary,
+      );
+    }
   }
 
-  // Trace secondary loop (e.g. tx.S1 -> am2 -> ld -> tx.S2, or tx.S1 -> tx.S2 short in Exp 3.2 SC)
-  if (secondaryI > 0.005) {
-    const txComp = components.find((c) => c.type === 'transformer1ph');
-    if (txComp) {
-      const s1: TerminalId = `${txComp.id}.S1`;
-      const s2: TerminalId = `${txComp.id}.S2`;
-      // Only trace secondary loop when S1 isn't wired directly to primary mains
-      const lvIsPrimary =
-        netGraph.areConnected(s2, 'sup.N') || netGraph.areConnected(s1, 'va.OUT_P');
-      if (!lvIsPrimary) {
-        markShortestFlowPath(secondaryAdj, s1, s2, secondaryI, flows);
-      }
+  // Trace secondary loop (e.g. tx.S1 -> am -> ld -> tx.S2, or tx.S1 -> tx.S2 short in Exp 3.2 SC)
+  if (secondaryI > 0.005 && transformers.length === 1) {
+    const txComp = transformers[0];
+    const s1: TerminalId = `${txComp.id}.S1`;
+    const s2: TerminalId = `${txComp.id}.S2`;
+    const lvIsPrimary =
+      netGraph.areConnected(s2, 'sup.N') || netGraph.areConnected(s1, 'va.OUT_P');
+    if (!lvIsPrimary) {
+      markShortestFlowPath(secondaryAdj, s1, s2, secondaryI, flows);
     }
   }
 

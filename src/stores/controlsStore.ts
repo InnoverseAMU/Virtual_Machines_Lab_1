@@ -119,7 +119,13 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
   setControlValue: (id, value) => {
     const state = get();
     if (id.endsWith('.switch') && value === true) {
-      const knobVal = Number(state.values['va.knob'] ?? state.variacV ?? 0);
+      const knobEntries = Object.entries(state.values).filter(([k]) =>
+        k.endsWith('.knob'),
+      );
+      const knobVal =
+        knobEntries.length > 0
+          ? Math.max(0, ...knobEntries.map(([, v]) => Number(v) || 0))
+          : Number(state.variacV ?? 0);
       const warn = checkPowerOnSafety(knobVal);
       if (warn) {
         useSessionStore.getState().pushToast(warn);

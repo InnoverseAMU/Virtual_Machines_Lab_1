@@ -105,6 +105,8 @@ export function Variac({
 
   const vDisplay = Number.isInteger(variacV) ? String(variacV) : variacV.toFixed(1);
 
+  const plateLabel = String(instance.params.plateLabel ?? 'AUTOTRANSFORMER');
+
   return (
     <group position={instance.position}>
       {/* Base plate & front terminal apron */}
@@ -186,7 +188,7 @@ export function Variac({
       </group>
 
       <LabelPlate
-        text="AUTOTRANSFORMER"
+        text={plateLabel}
         subtext={`${minV}-${maxV} V · ${vDisplay} V`}
         width={0.86}
         height={0.14}
