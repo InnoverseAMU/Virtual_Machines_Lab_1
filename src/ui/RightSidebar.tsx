@@ -557,7 +557,7 @@ export function RightSidebar({
 
   const stage = getStage(experiment, currentStageIndex);
   const isObserveMode = mode === 'observe';
-  const hasObservations = mode === 'self' || isObserveMode;
+  const hasObservations = mode === 'self' || isObserveMode || mode === 'learn';
   const currentTab: SidebarTab = hasObservations ? activeTab : 'bench';
   const canAddRow =
     hasObservations &&

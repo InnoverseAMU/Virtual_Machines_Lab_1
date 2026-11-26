@@ -749,22 +749,24 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           ...runPractised,
           [experimentId]: true,
         };
-      } else {
+      } else if (mode === 'self') {
         nextRunCompleted = {
           ...runCompleted,
           [experimentId]: true,
         };
       }
-      saveProgress({
-        version: 2,
-        attempts,
-        completedExperiments,
-        completedStages,
-        usedSolutionByExperiment,
-        learnCompleted,
-        runCompleted: nextRunCompleted,
-        runPractised: nextRunPractised,
-      });
+      if (mode === 'observe' || mode === 'self') {
+        saveProgress({
+          version: 2,
+          attempts,
+          completedExperiments,
+          completedStages,
+          usedSolutionByExperiment,
+          learnCompleted,
+          runCompleted: nextRunCompleted,
+          runPractised: nextRunPractised,
+        });
+      }
     }
 
     set({

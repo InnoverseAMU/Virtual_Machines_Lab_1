@@ -67,6 +67,7 @@ export function ObservationsPanel({
   const clearRunCheckResult = useSessionStore((s) => s.clearRunCheckResult);
 
   const isObserveMode = mode === 'observe';
+  const isLearnMode = mode === 'learn';
   const hasMultipleStages = experiment.stages.length > 1;
   const stage = getStage(experiment, currentStageIndex);
   const supplyOn = Boolean(controls['sup.switch']);
@@ -464,6 +465,20 @@ export function ObservationsPanel({
                       style={{ color: 'var(--vml-text-muted)' }}
                     >
                       Mode: Observe (pre-wired) · Recorded under practised runs.
+                    </div>
+                  </>
+                ) : isLearnMode ? (
+                  <>
+                    <div className="inline-block rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                      Learn practice passed
+                    </div>
+                    <div className="font-bold">{experiment.title}</div>
+                    <div
+                      className="text-[11px]"
+                      style={{ color: 'var(--vml-text-muted)' }}
+                    >
+                      Mode: Learn (guided) · Complete Self mode to earn a Run
+                      Passed badge.
                     </div>
                   </>
                 ) : (
