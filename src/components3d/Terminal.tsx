@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei';
 import { useState } from 'react';
+import { getStage } from '../core/circuit/stages';
 import { getExperiment } from '../core/experiments/registry';
 import type { TerminalDef, TerminalId } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
@@ -30,6 +31,7 @@ export function Terminal({
   const setHoveredTerminal = useWiringStore((s) => s.setHoveredTerminal);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
   const experimentId = useSessionStore((s) => s.experimentId);
+  const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
   const mode = useSessionStore((s) => s.mode);
   const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
   const resolvedTheme = useThemeStore((s) => s.resolved);
@@ -44,7 +46,8 @@ export function Terminal({
   let isNetHighlighted = false;
   let isNetDimmed = false;
   if (isObserveMode && highlightedNetIndex !== null) {
-    const net = getExperiment(experimentId).acceptedNetlists[0]?.[highlightedNetIndex];
+    const stage = getStage(getExperiment(experimentId), currentStageIndex);
+    const net = stage.acceptedNetlists[0]?.[highlightedNetIndex];
     if (net) {
       isNetHighlighted = net.includes(fullId);
       isNetDimmed = !isNetHighlighted;

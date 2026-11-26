@@ -6,13 +6,19 @@ import type { ComponentRef } from 'react';
 import * as THREE from 'three';
 import { ComponentRenderer } from '../components3d/ComponentRenderer';
 import { WireMesh } from '../components3d/Wire';
-import { buildNets } from '../core/circuit/nets';
+import { COMPONENT_FOOTPRINTS } from '../core/circuit/layout';
+import { buildNets, collectInternalLinks } from '../core/circuit/nets';
+import {
+  getStage,
+  getStageCameraPresets,
+  getStageComponents,
+} from '../core/circuit/stages';
 import { getExperiment, netlistToWirePairs } from '../core/experiments/registry';
 import type {
-  CameraPreset,
+  BaseConnectionState,
+  CameraPresetDef,
   ComponentType,
-  ConnectionState,
-  TransformerLoadOutput,
+  PhysicsSolveOutput,
   Wire,
 } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
@@ -20,27 +26,6 @@ import { useSessionStore } from '../stores/sessionStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useWiringStore } from '../stores/wiringStore';
 import { THEME_TOKENS } from '../theme/tokens';
-
-const CAMERA_PRESETS: Record<
-  CameraPreset,
-  { pos: [number, number, number]; target: [number, number, number] }
-> = {
-  overview: { pos: [0.25, 9.2, 8.4], target: [0.25, -1.15, 0.05] },
-  supply: { pos: [-3.45, 3.8, 4.3], target: [-3.45, -0.75, -0.15] },
-  meters: { pos: [0.05, 6.2, 6.0], target: [0.05, -1.1, -0.15] },
-  transformer: { pos: [0.15, 4.4, 4.8], target: [0.15, -0.75, 0.15] },
-  load: { pos: [2.0, 6.6, 6.3], target: [2.0, -1.2, -0.15] },
-};
-
-const COMPONENT_FOOTPRINTS: Record<ComponentType, [number, number, number]> = {
-  acSupply: [1.04, 0.86, 0.84],
-  variac1ph: [1.12, 0.94, 1.06],
-  wattmeter: [1.14, 0.72, 1.04],
-  transformer1ph: [1.34, 1.04, 1.06],
-  voltmeter: [0.96, 0.7, 0.92],
-  ammeter: [0.96, 0.7, 0.92],
-  lampLoad: [1.54, 0.98, 1.02],
-};
 
 function FocusHighlight({
   position,
@@ -76,7 +61,6 @@ function FocusHighlight({
 
   return (
     <group position={position}>
-      {/* Glowing outline around the focused apparatus */}
       <lineSegments position={[0, h / 2, 0]} geometry={edgesGeom}>
         <lineBasicMaterial
           ref={matRef}
@@ -85,7 +69,6 @@ function FocusHighlight({
           opacity={0.9}
         />
       </lineSegments>
-      {/* Benchtop halo */}
       <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[w + 0.14, d + 0.14]} />
         <meshBasicMaterial
@@ -121,14 +104,20 @@ function tweenColor(
 }
 
 function getResponsivePreset(
-  presetKey: CameraPreset,
+  presets: CameraPresetDef[],
+  presetKey: string,
   viewportWidth: number,
 ): { pos: [number, number, number]; target: [number, number, number] } {
-  const base = CAMERA_PRESETS[presetKey];
+  const base =
+    presets.find((p) => p.id === presetKey) ??
+    presets[0] ?? {
+      id: 'overview',
+      label: 'Overview',
+      pos: [0.25, 9.2, 8.4],
+      target: [0.25, -1.15, 0.05],
+    };
   if (viewportWidth >= 640) return base;
 
-  // On narrow portrait phones (<640 px), pull camera back and shift target slightly down
-  // so focused components sit completely above the bottom LearnPlayer card.
   const mult =
     presetKey === 'overview'
       ? 2.4
@@ -148,7 +137,7 @@ function getResponsivePreset(
   };
 }
 
-function CameraController() {
+function CameraController({ presets }: { presets: CameraPresetDef[] }) {
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const isDraggingControl = useControlsStore((s) => s.isDraggingControl);
@@ -158,7 +147,7 @@ function CameraController() {
 
   useEffect(() => {
     if (!cameraPreset) return;
-    const preset = getResponsivePreset(cameraPreset, size.width);
+    const preset = getResponsivePreset(presets, cameraPreset, size.width);
     const controls = controlsRef.current;
 
     if (isFirstRender.current) {
@@ -191,7 +180,7 @@ function CameraController() {
         onUpdate: () => controls.update(),
       });
     }
-  }, [cameraPreset, camera, size.width]);
+  }, [cameraPreset, presets, camera, size.width]);
 
   return (
     <OrbitControls
@@ -342,8 +331,8 @@ function ThemedEnvironment({
 }
 
 interface BenchSceneProps {
-  labOutput?: TransformerLoadOutput;
-  connectionState?: ConnectionState;
+  labOutput?: PhysicsSolveOutput;
+  connectionState?: BaseConnectionState;
   focusIds?: string[];
   controlsLocked?: boolean;
 }
@@ -355,6 +344,7 @@ export function BenchScene({
   controlsLocked = false,
 }: BenchSceneProps) {
   const experimentId = useSessionStore((s) => s.experimentId);
+  const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
   const mode = useSessionStore((s) => s.mode);
   const showingSolution = useSessionStore((s) => s.showingSolution);
   const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
@@ -362,16 +352,31 @@ export function BenchScene({
   const resolvedTheme = useThemeStore((s) => s.resolved);
   const wires = useWiringStore((s) => s.wires);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
+  const controlValues = useControlsStore((s) => s.values);
 
   const experiment = useMemo(() => getExperiment(experimentId), [experimentId]);
+  const stage = useMemo(
+    () => getStage(experiment, currentStageIndex),
+    [experiment, currentStageIndex],
+  );
+  const stageComponents = useMemo(
+    () => getStageComponents(experiment, stage),
+    [experiment, stage],
+  );
+  const cameraPresets = useMemo(
+    () => getStageCameraPresets(stage),
+    [stage],
+  );
+
   const highlightedNetTerminals = useMemo(() => {
     if (mode !== 'observe' || highlightedNetIndex === null) return null;
-    const net = experiment.acceptedNetlists[0]?.[highlightedNetIndex];
+    const net = stage.acceptedNetlists[0]?.[highlightedNetIndex];
     return net ? new Set(net) : null;
-  }, [mode, highlightedNetIndex, experiment]);
+  }, [mode, highlightedNetIndex, stage]);
+
   const netGraph = useMemo(
-    () => buildNets(experiment.components, wires),
-    [experiment.components, wires],
+    () => buildNets(stageComponents, wires, controlValues),
+    [stageComponents, wires, controlValues],
   );
 
   const wireMeta = useMemo(() => {
@@ -386,13 +391,16 @@ export function BenchScene({
 
   const ghostWireMeta = useMemo(() => {
     if (!showingSolution) return [];
-    const pairs = netlistToWirePairs(experiment.acceptedNetlists[0]);
+    const pairs = netlistToWirePairs(
+      stage.acceptedNetlists[0],
+      collectInternalLinks(stageComponents, controlValues),
+    );
     const ghostWires: Wire[] = pairs.map(([a, b], idx) => ({
       id: `ghost_${idx}_${a}_${b}`,
       a,
       b,
     }));
-    const ghostGraph = buildNets(experiment.components, ghostWires);
+    const ghostGraph = buildNets(stageComponents, ghostWires, controlValues);
     const countPerNet = new Map<number, number>();
     return ghostWires.map((w) => {
       const netIdx = ghostGraph.terminalToNetIndex.get(w.a) ?? 0;
@@ -400,7 +408,7 @@ export function BenchScene({
       countPerNet.set(netIdx, idxInNet + 1);
       return { wire: w, netIdx, idxInNet };
     });
-  }, [showingSolution, experiment]);
+  }, [showingSolution, stage, stageComponents, controlValues]);
 
   const benchMaterials = useMemo(() => {
     const init = THEME_TOKENS[useThemeStore.getState().resolved].scene;
@@ -437,6 +445,7 @@ export function BenchScene({
   }, [benchMaterials]);
 
   const focusColor = resolvedTheme === 'dark' ? '#38bdf8' : '#0284c7';
+  const overviewPose = cameraPresets[0]?.pos ?? [0.25, 9.2, 8.4];
 
   return (
     <Canvas
@@ -444,7 +453,7 @@ export function BenchScene({
       dpr={[1, 2]}
       style={{ display: 'block', width: '100%', height: '100%' }}
       camera={{
-        position: CAMERA_PRESETS.overview.pos,
+        position: overviewPose,
         fov: 40,
         near: 0.1,
         far: 80,
@@ -466,7 +475,7 @@ export function BenchScene({
         floorMat={benchMaterials.floorMat}
       />
 
-      <CameraController />
+      <CameraController presets={cameraPresets} />
 
       {/* Lab benchtop */}
       <group>
@@ -478,7 +487,6 @@ export function BenchScene({
         >
           <boxGeometry args={[11.8, 0.18, 4.3]} />
         </mesh>
-        {/* Front bench edge trim */}
         <mesh
           position={[0.15, -0.09, 2.01]}
           receiveShadow
@@ -486,7 +494,6 @@ export function BenchScene({
         >
           <boxGeometry args={[11.8, 0.18, 0.04]} />
         </mesh>
-        {/* Bench legs */}
         {[
           [-5.4, -1.18, -1.9],
           [5.6, -1.18, -1.9],
@@ -503,7 +510,6 @@ export function BenchScene({
             <boxGeometry args={[0.16, 2.0, 0.16]} />
           </mesh>
         ))}
-        {/* Lab room floor */}
         <mesh
           position={[0, -2.18, 0]}
           rotation={[-Math.PI / 2, 0, 0]}
@@ -514,8 +520,8 @@ export function BenchScene({
         </mesh>
       </group>
 
-      {/* Apparatus + generic risers + Learn mode focus highlights */}
-      {experiment.components.map((comp) => (
+      {/* Stage apparatus + risers + Learn mode focus highlights */}
+      {stageComponents.map((comp) => (
         <group key={comp.id}>
           {comp.position[1] > 0.01 && (
             <mesh
@@ -529,7 +535,7 @@ export function BenchScene({
           )}
           <ComponentRenderer
             instance={comp}
-            controlsDef={experiment.controls}
+            controlsDef={stage.controls}
             labOutput={labOutput}
             connectionState={connectionState}
             controlsLocked={controlsLocked}
@@ -556,7 +562,7 @@ export function BenchScene({
           <WireMesh
             key={wire.id}
             wire={wire}
-            components={experiment.components}
+            components={stageComponents}
             netIndex={netIdx}
             wireIndexInNet={idxInNet}
             highlighted={isWireHighlighted}
@@ -565,12 +571,12 @@ export function BenchScene({
         );
       })}
 
-      {/* Canonical Netlist A ghost solution overlay */}
+      {/* Canonical ghost solution overlay */}
       {ghostWireMeta.map(({ wire, netIdx, idxInNet }) => (
         <WireMesh
           key={wire.id}
           wire={wire}
-          components={experiment.components}
+          components={stageComponents}
           netIndex={netIdx}
           wireIndexInNet={idxInNet}
           ghost

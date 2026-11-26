@@ -1,62 +1,104 @@
-import { deriveConnectionState, matchFaultPatterns } from '../circuit/faults';
+import { matchFaultPatterns } from '../circuit/faults';
 import { buildNets, type WireInput } from '../circuit/nets';
+import { getStage, getStageComponents } from '../circuit/stages';
 import type {
-  ConnectionState,
+  BaseConnectionState,
+  ControlValues,
   ExperimentDef,
   MeterGains,
+  MeterReading,
+  PhysicsSolveOutput,
   RuntimeEvent,
   TransformerLoadControls,
-  TransformerLoadOutput,
 } from '../types';
 import { DEFAULT_METER_GAINS } from './meters';
-import {
-  extractTransformerParams,
-  solveTransformerLoad,
-  type SolveOptions,
-} from './models/transformerLoad';
+import { getPhysicsModel } from './registry';
 
-export interface ExperimentEvaluation {
-  connectionState: ConnectionState;
-  output: TransformerLoadOutput;
+export interface EvaluateOptions {
+  stageIndex?: number;
+  seed?: number;
+  noSag?: boolean;
+}
+
+export interface ExperimentEvaluation<
+  TConn extends BaseConnectionState = BaseConnectionState,
+> {
+  connectionState: TConn;
+  output: PhysicsSolveOutput;
 }
 
 /**
- * Pure bridge from experiment definition, wiring, and control inputs
- * to ConnectionState, physics quantities, meter readings, and runtime events.
+ * Normalizes either legacy TransformerLoadControls or generic ControlValues
+ * into a flat ControlValues map keyed by control id.
+ */
+export function toControlValues(
+  controls: ControlValues | TransformerLoadControls,
+): ControlValues {
+  if ('supplyOn' in controls && !('sup.switch' in controls)) {
+    const legacy = controls as TransformerLoadControls;
+    return {
+      'sup.switch': legacy.supplyOn,
+      'va.knob': legacy.variacV,
+      'wm.vRange': legacy.wmVRange,
+      'wm.iRange': legacy.wmIRange,
+      'ld.lamps': legacy.lamps,
+    };
+  }
+  return controls as ControlValues;
+}
+
+/**
+ * Looks up a meter reading by component id from a generic PhysicsSolveOutput.
+ */
+export function findMeterReading(
+  output: PhysicsSolveOutput | undefined,
+  meterId: string,
+): MeterReading | undefined {
+  return output?.meters.find((m) => m.id === meterId);
+}
+
+/**
+ * Pure bridge from experiment stage, wiring, and control inputs
+ * to ConnectionState, physics quantities, generic meter readings, and runtime events.
  */
 export function evaluateExperimentPhysics(
   experiment: ExperimentDef,
   wires: WireInput[],
-  controls: TransformerLoadControls,
-  gains: MeterGains = DEFAULT_METER_GAINS,
-  options: SolveOptions = {},
+  controls: ControlValues | TransformerLoadControls,
+  gains: Record<string, number> | MeterGains = DEFAULT_METER_GAINS,
+  options: EvaluateOptions = {},
 ): ExperimentEvaluation {
-  const graph = buildNets(experiment.components, wires);
-  const faults = matchFaultPatterns(experiment.faultPatterns, graph);
-  const connectionState = deriveConnectionState(
+  const stage = getStage(experiment, options.stageIndex ?? 0);
+  const components = getStageComponents(experiment, stage);
+  const controlValues = toControlValues(controls);
+
+  const graph = buildNets(components, wires, controlValues);
+  const faults = matchFaultPatterns(stage.faultPatterns, graph);
+  const model = getPhysicsModel(stage.physicsModel);
+
+  const connectionState = model.deriveConnectionState(
     graph,
+    controlValues,
+    stage.physicsParams,
     faults,
-    controls.supplyOn,
+    options.seed,
   );
 
-  if (experiment.physicsModel !== 'transformerLoad') {
-    throw new Error(`Unsupported physics model: ${experiment.physicsModel}`);
-  }
-
-  const params = extractTransformerParams(experiment.physicsParams);
-  const output = solveTransformerLoad(
-    params,
-    controls,
+  const output = model.solve({
+    params: stage.physicsParams,
+    controls: controlValues,
     connectionState,
     gains,
-    options,
-  );
+    seed: options.seed,
+    options: { noSag: options.noSag },
+    components,
+  });
 
   return { connectionState, output };
 }
 
 /**
- * Checks whether powering ON with the autotransformer above 10 V should emit
+ * Checks whether powering ON with an autotransformer above 10 V should emit
  * a startup safety warning (Spec Section 8).
  */
 export function checkPowerOnSafety(variacV: number): RuntimeEvent | null {

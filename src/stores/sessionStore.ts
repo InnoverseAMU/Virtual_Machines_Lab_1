@@ -1,17 +1,25 @@
 import { create } from 'zustand';
+import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
+import {
+  applyStageCarryOver,
+  getStage,
+  getStageComponents,
+} from '../core/circuit/stages';
 import { validateWiring } from '../core/circuit/validate';
-import { getExperiment } from '../core/experiments/registry';
-import { extractTransformerParams } from '../core/physics/models/transformerLoad';
+import type { AssetFile } from '../core/experiments/assets';
+import { EXPERIMENTS, getExperiment } from '../core/experiments/registry';
+import { toControlValues } from '../core/physics/evaluate';
 import {
   captureObservationRow,
   checkRunAnswers,
-  computeRunTruth,
+  evaluateRowRules,
   MAX_OBSERVATION_ROWS,
 } from '../core/physics/report';
-import type { AssetFile } from '../core/experiments/assets';
 import type {
   CameraPreset,
+  ControlValues,
   ObservationRow,
+  PhysicsSolveOutput,
   RunCheckResult,
   RuntimeEvent,
   TransformerLoadControls,
@@ -19,10 +27,18 @@ import type {
   ValidationResult,
   Wire,
 } from '../core/types';
+import { useControlsStore } from './controlsStore';
+import { useWiringStore } from './wiringStore';
 
 const PROGRESS_STORAGE_KEY = 'vml_progress_v1';
 const SIDEBAR_STORAGE_KEY = 'vml-sidebar';
 const NUMERIC_READOUTS_STORAGE_KEY = 'vml-numeric-readouts';
+
+export const OBSERVE_FIXED_SEED = 202601;
+
+export function createSessionSeed(): number {
+  return Math.floor(Date.now() % 2147483647) || 1337;
+}
 
 function loadBoolPref(key: string, fallback: boolean): boolean {
   try {
@@ -44,35 +60,59 @@ function savePref(key: string, value: string): void {
 }
 
 export interface StoredProgress {
+  version?: number;
   attempts: Record<string, number>;
   completedExperiments: string[];
+  completedStages: Record<string, string[]>;
   usedSolutionByExperiment: Record<string, boolean>;
   learnCompleted: Record<string, boolean>;
   runCompleted: Record<string, boolean>;
   runPractised: Record<string, boolean>;
 }
 
+/**
+ * Parses and migrates persisted progress (including legacy v1 data without completedStages).
+ */
 export function parseStoredProgress(raw: string | null): StoredProgress {
-  if (!raw) {
-    return {
-      attempts: {},
-      completedExperiments: [],
-      usedSolutionByExperiment: {},
-      learnCompleted: {},
-      runCompleted: {},
-      runPractised: {},
-    };
-  }
+  const empty: StoredProgress = {
+    version: 2,
+    attempts: {},
+    completedExperiments: [],
+    completedStages: {},
+    usedSolutionByExperiment: {},
+    learnCompleted: {},
+    runCompleted: {},
+    runPractised: {},
+  };
+  if (!raw) return empty;
   try {
     const parsed = JSON.parse(raw) as Partial<StoredProgress>;
+    const completedExperiments = Array.isArray(parsed.completedExperiments)
+      ? parsed.completedExperiments
+      : [];
+    const rawCompletedStages =
+      parsed.completedStages && typeof parsed.completedStages === 'object'
+        ? parsed.completedStages
+        : {};
+
+    const migratedStages: Record<string, string[]> = { ...rawCompletedStages };
+    for (const expId of completedExperiments) {
+      if (!migratedStages[expId]) {
+        const exp = EXPERIMENTS[expId];
+        if (exp) {
+          migratedStages[expId] = exp.stages.map((s) => s.id);
+        }
+      }
+    }
+
     return {
+      version: 2,
       attempts:
         parsed.attempts && typeof parsed.attempts === 'object'
           ? parsed.attempts
           : {},
-      completedExperiments: Array.isArray(parsed.completedExperiments)
-        ? parsed.completedExperiments
-        : [],
+      completedExperiments,
+      completedStages: migratedStages,
       usedSolutionByExperiment:
         parsed.usedSolutionByExperiment &&
         typeof parsed.usedSolutionByExperiment === 'object'
@@ -92,14 +132,7 @@ export function parseStoredProgress(raw: string | null): StoredProgress {
           : {},
     };
   } catch {
-    return {
-      attempts: {},
-      completedExperiments: [],
-      usedSolutionByExperiment: {},
-      learnCompleted: {},
-      runCompleted: {},
-      runPractised: {},
-    };
+    return empty;
   }
 }
 
@@ -129,8 +162,12 @@ interface SessionState {
   screen: AppScreen;
   experimentId: string;
   mode: LabMode;
+  sessionSeed: number;
+  currentStageIndex: number;
+
   attempts: Record<string, number>;
   completedExperiments: string[];
+  completedStages: Record<string, string[]>;
   usedSolutionByExperiment: Record<string, boolean>;
   learnCompleted: Record<string, boolean>;
   runCompleted: Record<string, boolean>;
@@ -143,8 +180,10 @@ interface SessionState {
   resultModalOpen: boolean;
   showingSolution: boolean;
 
-  // Observations & run report state (never persisted)
+  // Observations & run report state (per-stage tables, never persisted)
+  observationRowsByStage: Record<string, ObservationRow[]>;
   observationRows: ObservationRow[];
+  runAnswerInputs: Record<string, string>;
   runRegulationInput: string;
   runMaxEffLoadInput: string;
   runCheckResult: RunCheckResult | null;
@@ -165,13 +204,17 @@ interface SessionState {
   showNumericReadouts: boolean;
   toasts: RuntimeEvent[];
 
-  // Ephemeral reference viewers (never persisted, never count as hints/attempts)
+  // Ephemeral reference viewers
   diagramPanelOpen: boolean;
   pdfPreviewAsset: AssetFile | null;
 
   goToScreen: (screen: AppScreen) => void;
   selectExperiment: (id: string) => void;
   setMode: (mode: LabMode) => void;
+  setSessionSeed: (seed: number) => void;
+  setCurrentStageIndex: (index: number) => void;
+  switchObserveStage: (index: number) => void;
+  continueToNextStage: () => void;
   setCameraPreset: (preset: CameraPreset | null) => void;
   toggleTerminalLabels: () => void;
   toggleSidebar: () => void;
@@ -192,12 +235,13 @@ interface SessionState {
   exitSolutionView: () => void;
 
   addObservationRow: (
-    output: TransformerLoadOutput,
-    controls: TransformerLoadControls,
-    primaryEnergised: boolean,
+    output: PhysicsSolveOutput | TransformerLoadOutput,
+    controls: ControlValues | TransformerLoadControls,
+    energised: boolean,
   ) => void;
   deleteObservationRow: (id: string) => void;
   clearObservationRows: () => void;
+  setRunAnswerInput: (answerId: string, val: string) => void;
   setRunRegulationInput: (val: string) => void;
   setRunMaxEffLoadInput: (val: string) => void;
   submitRunAnswers: () => RunCheckResult;
@@ -220,12 +264,34 @@ interface SessionState {
 
 const initialProgress = loadProgress();
 
+function getStageMeterIds(experimentId: string, stageIndex: number): string[] {
+  try {
+    const exp = getExperiment(experimentId);
+    const stage = getStage(exp, stageIndex);
+    const comps = getStageComponents(exp, stage);
+    return comps
+      .filter(
+        (c) =>
+          c.type === 'voltmeter' ||
+          c.type === 'ammeter' ||
+          c.type === 'wattmeter',
+      )
+      .map((c) => c.id);
+  } catch {
+    return ['vp', 'vs', 'am', 'wm'];
+  }
+}
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   screen: 'picker',
   experimentId: 'ex3.1',
   mode: 'self',
+  sessionSeed: createSessionSeed(),
+  currentStageIndex: 0,
+
   attempts: initialProgress.attempts,
   completedExperiments: initialProgress.completedExperiments,
+  completedStages: initialProgress.completedStages,
   usedSolutionByExperiment: initialProgress.usedSolutionByExperiment,
   learnCompleted: initialProgress.learnCompleted,
   runCompleted: initialProgress.runCompleted,
@@ -237,7 +303,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   resultModalOpen: false,
   showingSolution: false,
 
+  observationRowsByStage: {},
   observationRows: [],
+  runAnswerInputs: {},
   runRegulationInput: '',
   runMaxEffLoadInput: '',
   runCheckResult: null,
@@ -272,12 +340,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   selectExperiment: (experimentId) =>
     set({
       experimentId,
+      currentStageIndex: 0,
       hintLevel: 0,
       usedSolutionInRun: false,
       validationResult: null,
       resultModalOpen: false,
       showingSolution: false,
+      observationRowsByStage: {},
       observationRows: [],
+      runAnswerInputs: {},
       runRegulationInput: '',
       runMaxEffLoadInput: '',
       runCheckResult: null,
@@ -293,6 +364,95 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }),
 
   setMode: (mode) => set({ mode }),
+
+  setSessionSeed: (sessionSeed) => set({ sessionSeed }),
+
+  setCurrentStageIndex: (index) => {
+    const { experimentId, observationRowsByStage } = get();
+    const exp = getExperiment(experimentId);
+    const clamped = Math.max(0, Math.min(exp.stages.length - 1, index));
+    const stage = getStage(exp, clamped);
+    set({
+      currentStageIndex: clamped,
+      observationRows: observationRowsByStage[stage.id] ?? [],
+      highlightedNetIndex: null,
+      highlightedNetPinned: false,
+      cameraPreset: 'overview',
+    });
+  },
+
+  switchObserveStage: (index) => {
+    const { experimentId, observationRowsByStage, sessionSeed } = get();
+    const exp = getExperiment(experimentId);
+    const clamped = Math.max(0, Math.min(exp.stages.length - 1, index));
+    const stage = getStage(exp, clamped);
+    const stageComps = getStageComponents(exp, stage);
+    const controlsStore = useControlsStore.getState();
+    controlsStore.initFromControls(
+      stage.controls,
+      sessionSeed,
+      getStageMeterIds(experimentId, clamped),
+    );
+    const pairs = wiresFromNetlist(
+      stage.acceptedNetlists[0],
+      collectInternalLinks(stageComps, useControlsStore.getState().values),
+      stageComps,
+    );
+    useWiringStore.getState().setObserveWires(pairs);
+    set({
+      currentStageIndex: clamped,
+      observationRows: observationRowsByStage[stage.id] ?? [],
+      highlightedNetIndex: null,
+      highlightedNetPinned: false,
+      cameraPreset: 'overview',
+      toasts: [],
+    });
+  },
+
+  continueToNextStage: () => {
+    const {
+      experimentId,
+      currentStageIndex,
+      observationRowsByStage,
+      sessionSeed,
+    } = get();
+    const exp = getExperiment(experimentId);
+    if (currentStageIndex >= exp.stages.length - 1) return;
+
+    const nextIndex = currentStageIndex + 1;
+    const nextStage = getStage(exp, nextIndex);
+    const nextComps = getStageComponents(exp, nextStage);
+
+    useControlsStore
+      .getState()
+      .initFromControls(
+        nextStage.controls,
+        sessionSeed,
+        getStageMeterIds(experimentId, nextIndex),
+      );
+    const nextControlValues = useControlsStore.getState().values;
+    const currentWires = useWiringStore.getState().wires;
+    const carried = applyStageCarryOver(
+      currentWires,
+      nextStage,
+      nextComps,
+      nextControlValues,
+    );
+    useWiringStore
+      .getState()
+      .setSolutionWires(carried.map((w) => [w.a, w.b]));
+
+    set({
+      currentStageIndex: nextIndex,
+      observationRows: observationRowsByStage[nextStage.id] ?? [],
+      hintLevel: 0,
+      validationResult: null,
+      resultModalOpen: false,
+      showingSolution: false,
+      cameraPreset: 'overview',
+      toasts: [],
+    });
+  },
 
   setCameraPreset: (cameraPreset) => set({ cameraPreset }),
 
@@ -321,8 +481,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   submitWiring: (wires) => {
     const {
       experimentId,
+      currentStageIndex,
       attempts,
       completedExperiments,
+      completedStages,
       usedSolutionByExperiment,
       usedSolutionInRun,
       learnCompleted,
@@ -330,16 +492,38 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       runPractised,
     } = get();
     const experiment = getExperiment(experimentId);
-    const result = validateWiring(experiment, wires);
+    const stage = getStage(experiment, currentStageIndex);
+    const controlValues = useControlsStore.getState().values;
+    const result = validateWiring(
+      experiment,
+      wires,
+      currentStageIndex,
+      controlValues,
+    );
 
     const nextAttempts = {
       ...attempts,
       [experimentId]: (attempts[experimentId] ?? 0) + 1,
     };
+
+    const existingStages = completedStages[experimentId] ?? [];
+    const nextExpStages =
+      result.correct && !existingStages.includes(stage.id)
+        ? [...existingStages, stage.id]
+        : existingStages;
+    const nextCompletedStages = {
+      ...completedStages,
+      [experimentId]: nextExpStages,
+    };
+
+    const allStagesWired = experiment.stages.every((s) =>
+      nextExpStages.includes(s.id),
+    );
     const nextCompleted =
-      result.correct && !completedExperiments.includes(experimentId)
+      allStagesWired && !completedExperiments.includes(experimentId)
         ? [...completedExperiments, experimentId]
         : completedExperiments;
+
     const nextUsedSolution = {
       ...usedSolutionByExperiment,
       ...(result.correct
@@ -351,8 +535,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     };
 
     saveProgress({
+      version: 2,
       attempts: nextAttempts,
       completedExperiments: nextCompleted,
+      completedStages: nextCompletedStages,
       usedSolutionByExperiment: nextUsedSolution,
       learnCompleted,
       runCompleted,
@@ -362,6 +548,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({
       attempts: nextAttempts,
       completedExperiments: nextCompleted,
+      completedStages: nextCompletedStages,
       usedSolutionByExperiment: nextUsedSolution,
       validationResult: result,
       resultModalOpen: true,
@@ -386,7 +573,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   nextHint: () =>
     set((state) => {
       const exp = getExperiment(state.experimentId);
-      const maxLevel = exp.hints.length;
+      const stage = getStage(exp, state.currentStageIndex);
+      const hints = stage.hints && stage.hints.length > 0 ? stage.hints : exp.hints;
+      const maxLevel = hints.length;
       return {
         hintLevel: Math.min(maxLevel, state.hintLevel + 1),
       };
@@ -401,63 +590,122 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   exitSolutionView: () => set({ showingSolution: false }),
 
-  addObservationRow: (output, controls, primaryEnergised) => {
-    const { observationRows, pushToast } = get();
-    if (!controls.supplyOn || !primaryEnergised) return;
-    if (observationRows.length >= MAX_OBSERVATION_ROWS) return;
+  addObservationRow: (output, controls, energised) => {
+    const {
+      experimentId,
+      currentStageIndex,
+      observationRowsByStage,
+      pushToast,
+    } = get();
+    const controlValues = toControlValues(controls);
+    const supplyOn = Boolean(controlValues['sup.switch']);
+    if (!supplyOn || !energised) return;
+
+    const experiment = getExperiment(experimentId);
+    const stage = getStage(experiment, currentStageIndex);
+    const stageRows = observationRowsByStage[stage.id] ?? [];
+    if (stageRows.length >= MAX_OBSERVATION_ROWS) return;
 
     rowCounter += 1;
     const row = captureObservationRow(
+      stage,
       output,
-      controls,
-      observationRows.length + 1,
+      controlValues,
+      stageRows.length + 1,
       `obs_${rowCounter}`,
     );
 
-    if (row.v1OutOfRange) {
-      pushToast({
-        id: 'obs-v1-range',
-        severity: 'warning',
-        message: `Row ${row.sno} recorded with V1 = ${row.v1.toFixed(1)} V (outside 230 ± 2 V).`,
-      });
+    const violations = evaluateRowRules(stage, row);
+    for (const v of violations) {
+      if (v.amber) {
+        pushToast({
+          id: `obs-rule-${v.ruleId}`,
+          severity: 'warning',
+          message: v.message,
+        });
+      }
     }
 
+    const nextStageRows = [...stageRows, row];
     set({
-      observationRows: [...observationRows, row],
+      observationRowsByStage: {
+        ...observationRowsByStage,
+        [stage.id]: nextStageRows,
+      },
+      observationRows: nextStageRows,
       runCheckResult: null,
     });
   },
 
   deleteObservationRow: (id) =>
     set((state) => {
-      const next = state.observationRows
+      const exp = getExperiment(state.experimentId);
+      const stage = getStage(exp, state.currentStageIndex);
+      const stageRows = state.observationRowsByStage[stage.id] ?? [];
+      const next = stageRows
         .filter((r) => r.id !== id)
-        .map((r, idx) => ({ ...r, sno: idx + 1 }));
+        .map((r, idx) => ({ ...r, sno: idx + 1, values: { ...r.values, sno: idx + 1 } }));
       return {
+        observationRowsByStage: {
+          ...state.observationRowsByStage,
+          [stage.id]: next,
+        },
         observationRows: next,
         runCheckResult: null,
       };
     }),
 
   clearObservationRows: () =>
-    set({
-      observationRows: [],
-      runCheckResult: null,
+    set((state) => {
+      const exp = getExperiment(state.experimentId);
+      const stage = getStage(exp, state.currentStageIndex);
+      return {
+        observationRowsByStage: {
+          ...state.observationRowsByStage,
+          [stage.id]: [],
+        },
+        observationRows: [],
+        runCheckResult: null,
+      };
     }),
 
-  setRunRegulationInput: (runRegulationInput) => set({ runRegulationInput }),
+  setRunAnswerInput: (answerId, val) =>
+    set((state) => ({
+      runAnswerInputs: { ...state.runAnswerInputs, [answerId]: val },
+      ...(answerId === 'regulationPct' ? { runRegulationInput: val } : {}),
+      ...(answerId === 'maxEffLoadPct' ? { runMaxEffLoadInput: val } : {}),
+    })),
 
-  setRunMaxEffLoadInput: (runMaxEffLoadInput) => set({ runMaxEffLoadInput }),
+  setRunRegulationInput: (runRegulationInput) =>
+    set((state) => ({
+      runRegulationInput,
+      runAnswerInputs: {
+        ...state.runAnswerInputs,
+        regulationPct: runRegulationInput,
+      },
+    })),
+
+  setRunMaxEffLoadInput: (runMaxEffLoadInput) =>
+    set((state) => ({
+      runMaxEffLoadInput,
+      runAnswerInputs: {
+        ...state.runAnswerInputs,
+        maxEffLoadPct: runMaxEffLoadInput,
+      },
+    })),
 
   submitRunAnswers: () => {
     const {
       experimentId,
       mode,
+      observationRowsByStage,
       observationRows,
+      runAnswerInputs,
       runRegulationInput,
       runMaxEffLoadInput,
       attempts,
       completedExperiments,
+      completedStages,
       usedSolutionByExperiment,
       learnCompleted,
       runCompleted,
@@ -465,17 +713,23 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     } = get();
 
     const experiment = getExperiment(experimentId);
-    const truth = computeRunTruth(
-      extractTransformerParams(experiment.physicsParams),
-    );
-    const regulationPct = Number.parseFloat(runRegulationInput);
-    const maxEffLoadPct = Number.parseFloat(runMaxEffLoadInput);
+    const primaryStage = getStage(experiment, 0);
+    const rowsByStage =
+      Object.keys(observationRowsByStage).length > 0
+        ? observationRowsByStage
+        : { [primaryStage.id]: observationRows };
 
-    const result = checkRunAnswers(
-      observationRows,
-      { regulationPct, maxEffLoadPct },
-      truth,
-    );
+    const mergedAnswers: Record<string, string> = {
+      ...runAnswerInputs,
+      ...(runRegulationInput !== ''
+        ? { regulationPct: runRegulationInput }
+        : {}),
+      ...(runMaxEffLoadInput !== ''
+        ? { maxEffLoadPct: runMaxEffLoadInput }
+        : {}),
+    };
+
+    const result = checkRunAnswers(experiment, rowsByStage, mergedAnswers);
 
     let nextRunCompleted = runCompleted;
     let nextRunPractised = runPractised;
@@ -493,8 +747,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         };
       }
       saveProgress({
+        version: 2,
         attempts,
         completedExperiments,
+        completedStages,
         usedSolutionByExperiment,
         learnCompleted,
         runCompleted: nextRunCompleted,
@@ -535,6 +791,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       experimentId,
       attempts,
       completedExperiments,
+      completedStages,
       usedSolutionByExperiment,
       learnCompleted,
       runCompleted,
@@ -545,8 +802,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       [experimentId]: true,
     };
     saveProgress({
+      version: 2,
       attempts,
       completedExperiments,
+      completedStages,
       usedSolutionByExperiment,
       learnCompleted: nextLearnCompleted,
       runCompleted,
@@ -560,6 +819,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   resetLearnRun: () =>
     set({
+      currentStageIndex: 0,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -582,12 +842,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   resetLabSession: () =>
     set({
+      currentStageIndex: 0,
       hintLevel: 0,
       usedSolutionInRun: false,
       validationResult: null,
       resultModalOpen: false,
       showingSolution: false,
+      observationRowsByStage: {},
       observationRows: [],
+      runAnswerInputs: {},
       runRegulationInput: '',
       runMaxEffLoadInput: '',
       runCheckResult: null,

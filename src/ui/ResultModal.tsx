@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { buildFeedback } from '../core/circuit/feedback';
+import { getStage } from '../core/circuit/stages';
 import type { ExperimentDef } from '../core/types';
 import { useSessionStore } from '../stores/sessionStore';
 import { HintPanel } from './HintPanel';
@@ -13,6 +14,7 @@ interface ResultModalProps {
 export function ResultModal({ experiment, onRequestReset }: ResultModalProps) {
   const [confirmingSolution, setConfirmingSolution] = useState(false);
 
+  const currentStageIndex = useSessionStore((s) => s.currentStageIndex);
   const validationResult = useSessionStore((s) => s.validationResult);
   const resultModalOpen = useSessionStore((s) => s.resultModalOpen);
   const hintLevel = useSessionStore((s) => s.hintLevel);
@@ -22,11 +24,17 @@ export function ResultModal({ experiment, onRequestReset }: ResultModalProps) {
   const closeResultModal = useSessionStore((s) => s.closeResultModal);
   const nextHint = useSessionStore((s) => s.nextHint);
   const activateSolutionView = useSessionStore((s) => s.activateSolutionView);
+  const continueToNextStage = useSessionStore((s) => s.continueToNextStage);
 
   const feedback = useMemo(() => {
     if (!validationResult) return null;
-    return buildFeedback(experiment, validationResult, hintLevel);
-  }, [experiment, validationResult, hintLevel]);
+    return buildFeedback(
+      experiment,
+      validationResult,
+      hintLevel,
+      currentStageIndex,
+    );
+  }, [experiment, validationResult, hintLevel, currentStageIndex]);
 
   const handleClose = () => {
     setConfirmingSolution(false);
@@ -36,6 +44,11 @@ export function ResultModal({ experiment, onRequestReset }: ResultModalProps) {
   if (!validationResult || !feedback) return null;
 
   const attemptCount = attempts[experiment.id] ?? 0;
+  const hasNextStage = currentStageIndex < experiment.stages.length - 1;
+  const currentStage = getStage(experiment, currentStageIndex);
+  const nextStage = hasNextStage
+    ? getStage(experiment, currentStageIndex + 1)
+    : null;
 
   return (
     <Modal
@@ -51,7 +64,9 @@ export function ResultModal({ experiment, onRequestReset }: ResultModalProps) {
                 Connections Correct
               </span>
               <h2 id="result-modal-title" className="mt-2 text-lg font-bold">
-                {experiment.title}
+                {experiment.stages.length > 1
+                  ? `${experiment.title} · ${currentStage.title}`
+                  : experiment.title}
               </h2>
             </div>
             <button
@@ -114,13 +129,36 @@ export function ResultModal({ experiment, onRequestReset }: ResultModalProps) {
               type="button"
               onClick={handleClose}
               className="rounded-lg px-4 py-2 text-xs font-semibold"
-              style={{
-                backgroundColor: 'var(--vml-accent)',
-                color: 'var(--vml-accent-text)',
-              }}
+              style={
+                hasNextStage
+                  ? {
+                      backgroundColor: 'var(--vml-panel-hover)',
+                      border: '1px solid var(--vml-border)',
+                    }
+                  : {
+                      backgroundColor: 'var(--vml-accent)',
+                      color: 'var(--vml-accent-text)',
+                    }
+              }
             >
               Continue on bench
             </button>
+            {hasNextStage && nextStage && (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmingSolution(false);
+                  continueToNextStage();
+                }}
+                className="rounded-lg px-4 py-2 text-xs font-semibold"
+                style={{
+                  backgroundColor: 'var(--vml-accent)',
+                  color: 'var(--vml-accent-text)',
+                }}
+              >
+                Continue to Stage {currentStageIndex + 2}: {nextStage.title} →
+              </button>
+            )}
           </div>
         </div>
       ) : confirmingSolution ? (

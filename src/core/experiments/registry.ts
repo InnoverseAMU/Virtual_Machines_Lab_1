@@ -1,6 +1,13 @@
+import { wiresFromNetlist } from '../circuit/nets';
 import { ex3_1 } from './ex3_1';
 import { ExperimentDefSchema } from './schema';
-import type { ExperimentDef, ExperimentSummary, Net, WireEndpointPair } from '../types';
+import type {
+  ExperimentDef,
+  ExperimentSummary,
+  Net,
+  TerminalId,
+  WireEndpointPair,
+} from '../types';
 
 const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1];
 
@@ -90,7 +97,13 @@ export function getExperiment(id: string): ExperimentDef {
  * Generates minimal star-topology wire pairs to realize a canonical netlist
  * (used by Show Solution).
  */
-export function netlistToWirePairs(netlist: Net[]): WireEndpointPair[] {
+export function netlistToWirePairs(
+  netlist: Net[],
+  internalLinks?: [TerminalId, TerminalId][],
+): WireEndpointPair[] {
+  if (internalLinks) {
+    return wiresFromNetlist(netlist, internalLinks);
+  }
   const pairs: WireEndpointPair[] = [];
   for (const net of netlist) {
     if (net.length < 2) continue;

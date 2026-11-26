@@ -1,11 +1,14 @@
 import { matchFaultPatterns } from './faults';
 import { buildNets, type WireInput } from './nets';
+import { getStage, getStageComponents, getStageHints } from './stages';
 import type {
+  ControlValues,
   ExperimentDef,
   ExtraConnectionIssue,
   Net,
   OpenNetIssue,
   ShortIssue,
+  StageDef,
   TerminalId,
   ValidationResult,
 } from '../types';
@@ -23,7 +26,7 @@ function evaluateAgainstNetlist(
   terminalToStudentNet: Map<TerminalId, number>,
   acceptedNetlist: Net[],
   netlistIndex: number,
-  experiment: ExperimentDef,
+  stage: StageDef,
 ): NetlistEvaluation {
   const openNets: OpenNetIssue[] = [];
   const terminalToReqNet = new Map<TerminalId, number>();
@@ -51,10 +54,10 @@ function evaluateAgainstNetlist(
         grouped[0][0],
         grouped[1][0],
       ];
-      const label = experiment.netLabels?.[reqIdx] ?? `Net ${reqIdx + 1}`;
+      const label = stage.netLabels?.[reqIdx] ?? `Net ${reqIdx + 1}`;
       const category =
-        experiment.netCategories?.[reqIdx] ?? `${label} is incomplete`;
-      const categoryKey = experiment.netCategoryKeys?.[reqIdx];
+        stage.netCategories?.[reqIdx] ?? `${label} is incomplete`;
+      const categoryKey = stage.netCategoryKeys?.[reqIdx];
       openNets.push({
         netIndex: reqIdx,
         label,
@@ -84,7 +87,7 @@ function evaluateAgainstNetlist(
     if (reqIndices.size > 1) {
       const merged = Array.from(reqIndices).sort((a, b) => a - b);
       const names = merged.map(
-        (idx) => experiment.netLabels?.[idx] ?? `Net ${idx + 1}`,
+        (idx) => stage.netLabels?.[idx] ?? `Net ${idx + 1}`,
       );
       shorts.push({
         studentNet: sNet,
@@ -93,8 +96,6 @@ function evaluateAgainstNetlist(
       });
     }
 
-    // Flag extra connections involving terminals outside every required net
-    // when a student actually wired them to something else (size > 1).
     if (outsideTerminals.length > 0 && sNet.length > 1) {
       extras.push({
         studentNet: sNet,
@@ -120,24 +121,28 @@ export function canModifyWiring(
 }
 
 /**
- * Validates student wiring against all accepted netlists in an experiment
+ * Validates student wiring against all accepted netlists in an experiment stage
  * using union-find net equivalence (independent of wire order or draw direction).
  */
 export function validateWiring(
   experiment: ExperimentDef,
   wires: WireInput[],
+  stageIndex = 0,
+  controls: ControlValues = {},
 ): ValidationResult {
-  const graph = buildNets(experiment.components, wires);
-  const faults = matchFaultPatterns(experiment.faultPatterns, graph);
+  const stage = getStage(experiment, stageIndex);
+  const components = getStageComponents(experiment, stage);
+  const graph = buildNets(components, wires, controls);
+  const faults = matchFaultPatterns(stage.faultPatterns, graph);
 
   let bestEval: NetlistEvaluation | null = null;
-  for (let i = 0; i < experiment.acceptedNetlists.length; i++) {
+  for (let i = 0; i < stage.acceptedNetlists.length; i++) {
     const ev = evaluateAgainstNetlist(
       graph.nets,
       graph.terminalToNetIndex,
-      experiment.acceptedNetlists[i],
+      stage.acceptedNetlists[i],
       i,
-      experiment,
+      stage,
     );
     if (bestEval === null || ev.score < bestEval.score) {
       bestEval = ev;
@@ -162,6 +167,6 @@ export function validateWiring(
     shorts: chosen.shorts,
     extras: chosen.extras,
     faults,
-    hintLevelAvailable: experiment.hints.length,
+    hintLevelAvailable: getStageHints(experiment, stage).length,
   };
 }

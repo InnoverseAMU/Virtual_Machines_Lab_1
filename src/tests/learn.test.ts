@@ -4,16 +4,21 @@ import {
   findVariacForTargetV1,
 } from '../core/circuit/learn';
 import { buildNets } from '../core/circuit/nets';
+import { getAllLearnSteps } from '../core/circuit/stages';
 import { validateWiring } from '../core/circuit/validate';
 import { getComponentDef } from '../core/components';
 import { ex3_1, NET_A } from '../core/experiments/ex3_1';
 import { netlistToWirePairs } from '../core/experiments/registry';
-import { evaluateExperimentPhysics } from '../core/physics/evaluate';
+import {
+  evaluateExperimentPhysics,
+  findMeterReading,
+} from '../core/physics/evaluate';
 import type { TransformerLoadControls, WireEndpointPair } from '../core/types';
 
 describe('Exp 3.1 Learn mode steps and conditions', () => {
   it('has 17 learn steps referencing existing component ids and terminal ids', () => {
-    expect(ex3_1.learnSteps).toHaveLength(17);
+    const steps = getAllLearnSteps(ex3_1);
+    expect(steps).toHaveLength(17);
 
     const componentIds = new Set(ex3_1.components.map((c) => c.id));
     const terminalIds = new Set<string>();
@@ -23,8 +28,9 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
       }
     }
 
-    for (const step of ex3_1.learnSteps) {
+    for (const step of steps) {
       expect(step.id).toBeTruthy();
+      expect(step.stageId).toBe(ex3_1.stages[0].id);
       for (const cid of step.focus) {
         expect(componentIds.has(cid), `Unknown component in focus: ${cid}`).toBe(
           true,
@@ -38,7 +44,7 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
   });
 
   it('wires drawn across all learn steps equal Netlist A exactly', () => {
-    const stepWires: WireEndpointPair[] = ex3_1.learnSteps.flatMap(
+    const stepWires: WireEndpointPair[] = getAllLearnSteps(ex3_1).flatMap(
       (s) => s.connectTerminals ?? [],
     );
     const res = validateWiring(ex3_1, stepWires);
@@ -54,8 +60,9 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
   });
 
   it('step 12 condition requires supply ON and V1 within 230 +/- 3 V', () => {
-    const step12 = ex3_1.learnSteps[11];
-    const stepWires = ex3_1.learnSteps.flatMap((s) => s.connectTerminals ?? []);
+    const steps = getAllLearnSteps(ex3_1);
+    const step12 = steps[11];
+    const stepWires = steps.flatMap((s) => s.connectTerminals ?? []);
 
     const offControls: TransformerLoadControls = {
       supplyOn: false,
@@ -91,8 +98,9 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
   });
 
   it('step 13 condition requires supply ON, 0 lamps, V1 within 230 +/- 3 V, and Got it ack', () => {
-    const step13 = ex3_1.learnSteps[12];
-    const stepWires = ex3_1.learnSteps.flatMap((s) => s.connectTerminals ?? []);
+    const steps = getAllLearnSteps(ex3_1);
+    const step13 = steps[12];
+    const stepWires = steps.flatMap((s) => s.connectTerminals ?? []);
     const controls: TransformerLoadControls = {
       supplyOn: true,
       variacV: 230,
@@ -109,7 +117,6 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
     const afterAck = evaluateLearnStepCondition(step13, controls, out, true);
     expect(afterAck.met).toBe(true);
 
-    // Turning on lamps invalidates no-load readiness
     const withLoad: TransformerLoadControls = { ...controls, lamps: 1 };
     const loadOut = evaluateExperimentPhysics(ex3_1, stepWires, withLoad).output;
     expect(
@@ -118,8 +125,9 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
   });
 
   it('step 14 condition requires >= 5 lamps ON and V1 re-adjusted to 230 +/- 3 V', () => {
-    const step14 = ex3_1.learnSteps[13];
-    const stepWires = ex3_1.learnSteps.flatMap((s) => s.connectTerminals ?? []);
+    const steps = getAllLearnSteps(ex3_1);
+    const step14 = steps[13];
+    const stepWires = steps.flatMap((s) => s.connectTerminals ?? []);
 
     const fewLamps: TransformerLoadControls = {
       supplyOn: true,
@@ -147,7 +155,9 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
   });
 
   it('findVariacForTargetV1 finds knob value producing V1 = 230 +/- 1 V across lamp counts', () => {
-    const stepWires = ex3_1.learnSteps.flatMap((s) => s.connectTerminals ?? []);
+    const stepWires = getAllLearnSteps(ex3_1).flatMap(
+      (s) => s.connectTerminals ?? [],
+    );
     for (const lamps of [0, 5, 10, 12]) {
       const knob = findVariacForTargetV1(ex3_1, stepWires, 230, lamps);
       const out = evaluateExperimentPhysics(ex3_1, stepWires, {
@@ -157,7 +167,8 @@ describe('Exp 3.1 Learn mode steps and conditions', () => {
         wmIRange: 10,
         lamps,
       }).output;
-      expect(Math.abs(out.meters.vp.shownValue - 230)).toBeLessThanOrEqual(1);
+      const vp = findMeterReading(out, 'vp')?.shownValue ?? 0;
+      expect(Math.abs(vp - 230)).toBeLessThanOrEqual(1);
     }
   });
 });

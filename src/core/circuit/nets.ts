@@ -1,6 +1,7 @@
-import { getComponentDef } from '../components';
+import { getComponentDef, resolveComponentInternalLinks } from '../components';
 import type {
   ComponentInstance,
+  ControlValues,
   Net,
   TerminalId,
   Wire,
@@ -15,7 +16,7 @@ function extractPair(wire: WireInput): WireEndpointPair {
 
 /**
  * Union-Find over terminal IDs. Always merges internal component links
- * (e.g. variac IN_N and OUT_N) before merging student wires.
+ * (e.g. variac IN_N and OUT_N, or selector-plug links) before merging student wires.
  */
 export class UnionFind {
   private parent = new Map<string, string>();
@@ -80,6 +81,7 @@ export interface NetGraph {
 export function buildNets(
   components: ComponentInstance[],
   wires: WireInput[],
+  controls: ControlValues = {},
 ): NetGraph {
   const uf = new UnionFind();
 
@@ -88,10 +90,8 @@ export function buildNets(
     for (const term of def.terminals) {
       uf.add(`${comp.id}.${term.name}`);
     }
-    if (def.internalLinks) {
-      for (const [t1, t2] of def.internalLinks) {
-        uf.union(`${comp.id}.${t1}`, `${comp.id}.${t2}`);
-      }
+    for (const [t1, t2] of resolveComponentInternalLinks(def, comp, controls)) {
+      uf.union(`${comp.id}.${t1}`, `${comp.id}.${t2}`);
     }
   }
 
@@ -154,15 +154,78 @@ export function buildNets(
 
 export function collectInternalLinks(
   components: ComponentInstance[],
+  controls: ControlValues = {},
 ): [TerminalId, TerminalId][] {
   const links: [TerminalId, TerminalId][] = [];
   for (const comp of components) {
     const def = getComponentDef(comp.type);
-    for (const [t1, t2] of def.internalLinks ?? []) {
+    for (const [t1, t2] of resolveComponentInternalLinks(def, comp, controls)) {
       links.push([`${comp.id}.${t1}`, `${comp.id}.${t2}`]);
     }
   }
   return links;
+}
+
+/**
+ * Merges a sequence of net-group fragments into a single netlist.
+ * Disjoint nets keep their exact declaration order; nets sharing any terminal
+ * are merged together at the position of their first appearance.
+ */
+function combineNetFragments(fragments: Net[][]): Net[] {
+  const rawNets = fragments.flat();
+  const uf = new UnionFind();
+  const orderedTerminals: TerminalId[] = [];
+
+  for (const net of rawNets) {
+    if (net.length === 0) continue;
+    for (let i = 0; i < net.length; i++) {
+      const t = net[i];
+      if (!orderedTerminals.includes(t)) {
+        orderedTerminals.push(t);
+      }
+      uf.add(t);
+      if (i > 0) {
+        uf.union(net[0], t);
+      }
+    }
+  }
+
+  const rootOrder: string[] = [];
+  const rootMembers = new Map<string, TerminalId[]>();
+  for (const t of orderedTerminals) {
+    const root = uf.find(t);
+    let members = rootMembers.get(root);
+    if (!members) {
+      members = [];
+      rootMembers.set(root, members);
+      rootOrder.push(root);
+    }
+    members.push(t);
+  }
+
+  return rootOrder.map((root) => rootMembers.get(root)!);
+}
+
+/**
+ * Produces acceptedNetlists as the Cartesian product of independent variant sets.
+ * Each variantSet is a list of alternative Net[] fragments (e.g. wattmeter V1 on M vs L).
+ */
+export function crossProduct(variantSets: Net[][][]): Net[][] {
+  if (variantSets.length === 0) return [];
+  if (variantSets.some((vs) => vs.length === 0)) return [];
+
+  let combos: Net[][][] = [[]];
+  for (const variantSet of variantSets) {
+    const next: Net[][][] = [];
+    for (const prefix of combos) {
+      for (const option of variantSet) {
+        next.push([...prefix, option]);
+      }
+    }
+    combos = next;
+  }
+
+  return combos.map((fragments) => combineNetFragments(fragments));
 }
 
 function getWorldPosMap(
@@ -197,7 +260,6 @@ function orderNetByDistance(
 ): TerminalId[] {
   if (net.length <= 2 || posMap.size === 0) return [...net];
   const remaining = [...net];
-  // Start from the leftmost terminal so chains flow neatly across the bench
   remaining.sort((a, b) => {
     const pa = posMap.get(a);
     const pb = posMap.get(b);

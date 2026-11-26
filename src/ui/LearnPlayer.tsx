@@ -2,6 +2,8 @@ import type { LearnConditionStatus } from '../core/circuit/learn';
 import type { LearnStep } from '../core/types';
 
 interface LearnPlayerProps {
+  experimentTitle: string;
+  stageTitle?: string;
   step: LearnStep;
   stepIndex: number;
   totalSteps: number;
@@ -21,6 +23,8 @@ interface LearnPlayerProps {
 }
 
 export function LearnPlayer({
+  experimentTitle,
+  stageTitle,
   step,
   stepIndex,
   totalSteps,
@@ -41,7 +45,9 @@ export function LearnPlayer({
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === totalSteps - 1;
   const showHiddenNumbersNote =
-    !showNumericReadouts && (stepIndex === 12 || stepIndex === 14);
+    !showNumericReadouts &&
+    (step.completionCondition?.kind === 'no-load-ack' ||
+      step.focus.includes('wm'));
   const nextDisabled = conditionStatus.hasCondition && !conditionStatus.met;
 
   return (
@@ -69,15 +75,14 @@ export function LearnPlayer({
             </button>
           </div>
           <h2 className="text-sm font-bold md:text-base">
-            Exp 3.1 Guided Walkthrough Complete
+            {experimentTitle} Walkthrough Complete
           </h2>
           <p
             className="text-xs leading-relaxed"
             style={{ color: 'var(--vml-text-muted)' }}
           >
-            You have wired the single-phase transformer load test, measured
-            no-load and loaded readings while holding 230 V, and reviewed the
-            regulation and efficiency formulas.
+            You have completed the guided wiring, live instrument checks, and
+            result calculations for this experiment.
           </p>
           <div className="flex flex-wrap gap-2 pt-1">
             <button
@@ -106,18 +111,31 @@ export function LearnPlayer({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {/* Header: progress + exit */}
+          {/* Header: progress + stage badge + exit */}
           <div className="flex items-center justify-between gap-2">
-            <span
-              className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold"
-              style={{
-                backgroundColor: 'var(--vml-panel-hover)',
-                color: 'var(--vml-accent)',
-                border: '1px solid var(--vml-border)',
-              }}
-            >
-              Step {stepIndex + 1} of {totalSteps}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-bold"
+                style={{
+                  backgroundColor: 'var(--vml-panel-hover)',
+                  color: 'var(--vml-accent)',
+                  border: '1px solid var(--vml-border)',
+                }}
+              >
+                Step {stepIndex + 1} of {totalSteps}
+              </span>
+              {stageTitle && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    color: 'var(--vml-text-muted)',
+                  }}
+                >
+                  {stageTitle}
+                </span>
+              )}
+            </div>
             <button
               type="button"
               onClick={onExit}
@@ -203,7 +221,6 @@ export function LearnPlayer({
             </div>
           )}
 
-          {/* Footer controls */}
           <div className="flex flex-wrap items-center justify-between gap-1.5 pt-0.5">
             <div className="flex items-center gap-1.5">
               <button
