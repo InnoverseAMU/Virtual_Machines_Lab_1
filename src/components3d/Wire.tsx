@@ -22,9 +22,13 @@ interface WireMeshProps {
   flowCurrentA?: number;
 }
 
-const PARTICLE_COUNT = 3;
-const SHARED_PARTICLE_GEO = new THREE.SphereGeometry(0.027, 10, 10);
-const _scratchPos = new THREE.Vector3();
+const MAX_PARTICLE_COUNT = 26;
+const SHARED_PARTICLE_GEO = new THREE.SphereGeometry(0.0115, 8, 8);
+const SHARED_PARTICLE_MAT = new THREE.MeshBasicMaterial({
+  color: '#f0f9ff',
+  toneMapped: false,
+});
+const _scratchObj = new THREE.Object3D();
 
 function WireFlowParticles({
   curve,
@@ -35,48 +39,48 @@ function WireFlowParticles({
   direction: -1 | 1;
   currentA: number;
 }) {
-  const particleRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const meshRef = useRef<THREE.InstancedMesh>(null);
   const phaseRef = useRef(0);
 
+  const { curveLength, count } = useMemo(() => {
+    const len = Math.max(0.25, curve.getLength());
+    const n = Math.max(6, Math.min(MAX_PARTICLE_COUNT, Math.round(len * 9)));
+    return { curveLength: len, count: n };
+  }, [curve]);
+
   useFrame((_, delta) => {
+    const inst = meshRef.current;
+    if (!inst) return;
     const dt = Math.min(delta, 0.05);
-    const cyclesPerSec = Math.min(
-      0.62,
-      Math.max(0.24, 0.22 + Math.log10(1 + Math.max(0, currentA)) * 0.25),
+    // Uniform world-space drift speed (m/s) along all wires, gently modulated by current
+    const worldSpeed = Math.min(
+      0.85,
+      Math.max(0.32, 0.3 + Math.log10(1 + Math.max(0, currentA)) * 0.35),
     );
+    const cyclesPerSec = worldSpeed / curveLength;
     phaseRef.current = (phaseRef.current + dt * cyclesPerSec) % 1;
 
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const mesh = particleRefs.current[i];
-      if (!mesh) continue;
-      const u = (phaseRef.current + i / PARTICLE_COUNT) % 1;
+    for (let i = 0; i < count; i++) {
+      const u = (phaseRef.current + i / count) % 1;
       const t = direction > 0 ? u : 1 - u;
-      curve.getPoint(t, _scratchPos);
-      mesh.position.copy(_scratchPos);
+      curve.getPoint(t, _scratchObj.position);
       const envelope = 0.45 + 0.55 * Math.sin(Math.PI * u);
-      mesh.scale.setScalar(envelope);
+      _scratchObj.scale.setScalar(envelope);
+      _scratchObj.updateMatrix();
+      inst.setMatrixAt(i, _scratchObj.matrix);
     }
+    inst.instanceMatrix.needsUpdate = true;
   });
 
   return (
-    <group>
-      {Array.from({ length: PARTICLE_COUNT }, (_, i) => (
-        <mesh
-          key={i}
-          ref={(el) => {
-            particleRefs.current[i] = el;
-          }}
-          geometry={SHARED_PARTICLE_GEO}
-        >
-          <meshBasicMaterial
-            color="#e0f2fe"
-            transparent
-            opacity={0.78}
-            depthWrite={false}
-          />
-        </mesh>
-      ))}
-    </group>
+    <instancedMesh
+      key={count}
+      ref={meshRef}
+      args={[SHARED_PARTICLE_GEO, SHARED_PARTICLE_MAT, count]}
+      dispose={null}
+      renderOrder={1}
+      frustumCulled={false}
+    />
   );
 }
 
@@ -184,13 +188,22 @@ export function WireMesh({
 
   const baseColor =
     NET_WIRE_COLORS[Math.abs(netIndex) % NET_WIRE_COLORS.length];
+  const isFlowing = !ghost && !dimmed && flowDirection !== 0;
 
   return (
     <group>
+      {isFlowing && (
+        <WireFlowParticles
+          curve={curve}
+          direction={flowDirection}
+          currentA={flowCurrentA}
+        />
+      )}
       <mesh
         ref={meshRef}
         geometry={geometry}
         castShadow={!ghost}
+        renderOrder={isFlowing ? 2 : 0}
         onClick={(e) => {
           if (blockClick) return;
           e.stopPropagation();
@@ -221,18 +234,11 @@ export function WireMesh({
           }
           roughness={0.4}
           metalness={0.1}
-          transparent={ghost || dimmed}
-          opacity={ghost ? 0.65 : dimmed ? 0.16 : 1}
-          depthWrite={!ghost && !dimmed}
+          transparent={ghost || dimmed || isFlowing}
+          opacity={ghost ? 0.65 : dimmed ? 0.16 : isFlowing ? 0.76 : 1}
+          depthWrite={!ghost && !dimmed && !isFlowing}
         />
       </mesh>
-      {!ghost && !dimmed && flowDirection !== 0 && (
-        <WireFlowParticles
-          curve={curve}
-          direction={flowDirection}
-          currentA={flowCurrentA}
-        />
-      )}
     </group>
   );
 }
