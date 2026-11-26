@@ -32,13 +32,14 @@ export function AnalogMeter({
   const [hoveredRange, setHoveredRange] = useState(false);
 
   const isAmmeter = instance.type === 'ammeter';
+  const modeTag = String(instance.params.currentMode ?? 'AC').toUpperCase();
   const defaultRange = Number(
     activeRange ??
       reading?.range ??
       instance.params.range ??
       (rangeOptions?.[0] ?? (isAmmeter ? 25 : 300)),
   );
-  const unit = isAmmeter ? 'A (AC)' : 'V (AC)';
+  const unit = isAmmeter ? `A (${modeTag})` : `V (${modeTag})`;
   const shortUnit = isAmmeter ? 'A' : 'V';
   const accentColor = isAmmeter ? '#1e3a5f' : '#3b2f2f';
   const decimals = reading?.decimals ?? (isAmmeter ? 2 : 1);

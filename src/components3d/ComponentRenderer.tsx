@@ -12,8 +12,10 @@ import { AcSupply } from './AcSupply';
 import { AcSupply3ph } from './AcSupply3ph';
 import { AnalogMeter } from './AnalogMeter';
 import { CurrentTransformer } from './CurrentTransformer';
+import { DcSupply } from './DcSupply';
 import { InductionMotor3ph } from './InductionMotor3ph';
 import { LampBank } from './LampBank';
+import { PotDivider } from './PotDivider';
 import { ProbeVoltmeter } from './ProbeVoltmeter';
 import { Rheostat } from './Rheostat';
 import { SelectorSwitch } from './SelectorSwitch';
@@ -212,7 +214,11 @@ export function ComponentRenderer({
       const loadDef = controlsDef.find(
         (c) => c.componentId === instance.id && c.kind === 'knob',
       );
+      const lockDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
       const loadF = loadDef ? Number(values[loadDef.id] ?? 0) : 0;
+      const rotorBlocked = lockDef ? Boolean(values[lockDef.id]) : false;
       const rpm = labOutput?.outputs?.n ?? 0;
       const t1 = labOutput?.outputs?.T1 ?? 1.0 + 1.556 * loadF;
       const t2 = labOutput?.outputs?.T2 ?? 1.0 + 0.556 * loadF;
@@ -223,6 +229,37 @@ export function ComponentRenderer({
           t1Kgf={t1}
           t2Kgf={t2}
           loadF={loadF}
+          rotorBlocked={rotorBlocked}
+        />
+      );
+    }
+    case 'dcSupply': {
+      const swDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'switch',
+      );
+      const swId = swDef?.id ?? 'dcSupply.switch';
+      return (
+        <DcSupply
+          instance={instance}
+          controlId={swId}
+          supplyOn={Boolean(values[swId])}
+          mcbTripped={mcbTripped}
+          controlsLocked={controlsLocked}
+        />
+      );
+    }
+    case 'potDivider': {
+      const pDef = controlsDef.find(
+        (c) => c.componentId === instance.id && c.kind === 'knob',
+      );
+      const pId = pDef?.id ?? 'pot.p';
+      return (
+        <PotDivider
+          instance={instance}
+          controlId={pId}
+          p={Number(values[pId] ?? 0)}
+          damaged={Boolean(labOutput?.outputs?.potDamaged)}
+          controlsLocked={controlsLocked}
         />
       );
     }

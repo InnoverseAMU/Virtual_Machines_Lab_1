@@ -60,6 +60,9 @@ const ACCEPTED_NETLISTS: Net[][] = crossProduct([
 
 const CANONICAL_NETS: Net[] = ACCEPTED_NETLISTS[0];
 
+export const EX4_1_ACCEPTED_NETLISTS: Net[][] = ACCEPTED_NETLISTS;
+export const EX4_1_CANONICAL_NETS: Net[] = CANONICAL_NETS;
+
 // Pick row closest to rated line current (5.93 A) as the full-load row
 function findRatedCurrentRow(rows: ObservationRow[]): ObservationRow | null {
   if (rows.length === 0) return null;

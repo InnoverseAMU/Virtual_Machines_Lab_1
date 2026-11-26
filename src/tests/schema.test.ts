@@ -79,7 +79,7 @@ describe('Experiment schema and terminal integrity', () => {
     expect(netATerminals.size).toBe(ex31Terminals.size);
   });
 
-  it('registry lists all 9 manual experiments with exact ids, titles, and ex3.1..ex4.1 available', () => {
+  it('registry lists all 9 manual experiments with exact ids, titles, and ex3.1..ex4.2 available', () => {
     expect(EXPERIMENT_SUMMARIES).toHaveLength(9);
     const available = EXPERIMENT_SUMMARIES.filter((e) => e.available);
     expect(available.map((e) => e.id)).toEqual([
@@ -90,6 +90,7 @@ describe('Experiment schema and terminal integrity', () => {
       'ex3.5',
       'ex3.6',
       'ex4.1',
+      'ex4.2',
     ]);
 
     const expected: Array<[string, string, string]> = [

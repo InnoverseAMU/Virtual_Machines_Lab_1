@@ -27,6 +27,8 @@ const FaultPatternSchema = z.object({
 const ComponentTypeSchema = z.enum([
   'acSupply',
   'acSupply3ph',
+  'dcSupply',
+  'potDivider',
   'variac1ph',
   'variac3ph',
   'wattmeter',
@@ -67,6 +69,7 @@ const ControlDefSchema = z.discriminatedUnion('kind', [
     kind: z.literal('switch'),
     label: z.string().min(1),
     defaultValue: z.boolean(),
+    lockWhenSupplyOn: z.boolean().optional(),
   }),
   z.object({
     id: z.string().min(1),
@@ -303,6 +306,7 @@ const StageDefSchema = z.object({
   carryOver: z.enum(['none', 'consistent-wires']).optional(),
   probeEnabled: z.boolean().optional(),
   identificationMode: z.enum(['winding-pairs', 'phase-groups']).optional(),
+  rowGroupColumnId: z.string().min(1).optional(),
   twoReadingCapture: z
     .object({
       selectorControlId: z.string().min(1),

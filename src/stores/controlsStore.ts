@@ -85,9 +85,11 @@ function syncLegacyFromValues(
   const supplyOn =
     'sup3.switch' in values
       ? Boolean(values['sup3.switch'])
-      : 'sup.switch' in values
-        ? Boolean(values['sup.switch'])
-        : prevState.supplyOn;
+      : 'dcSupply.switch' in values
+        ? Boolean(values['dcSupply.switch'])
+        : 'sup.switch' in values
+          ? Boolean(values['sup.switch'])
+          : prevState.supplyOn;
   const variacV =
     'va3.knob' in values
       ? Number(values['va3.knob'])
@@ -128,6 +130,25 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
 
   setControlValue: (id, value) => {
     const state = get();
+    const sess = useSessionStore.getState();
+    try {
+      const stage = getStage(getExperiment(sess.experimentId), sess.currentStageIndex);
+      const ctrlDef = stage.controls.find((c) => c.id === id);
+      if (
+        ctrlDef?.kind === 'switch' &&
+        ctrlDef.lockWhenSupplyOn &&
+        state.supplyOn
+      ) {
+        sess.pushToast({
+          id: 'rotor-lock-live',
+          severity: 'warning',
+          message: 'Turn off the supply before changing the rotor lock.',
+        });
+        return;
+      }
+    } catch {
+      // ignore during uninitialized store
+    }
     if ((id === 'sup.switch' || id === 'sup3.switch') && value === true) {
       const knobEntries = Object.entries(state.values).filter(([k]) =>
         k.endsWith('.knob'),
@@ -138,7 +159,7 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
           : Number(state.variacV ?? 0);
       const warn = checkPowerOnSafety(knobVal);
       if (warn) {
-        useSessionStore.getState().pushToast(warn);
+        sess.pushToast(warn);
       }
     }
     const nextValues = { ...state.values, [id]: value };
@@ -148,7 +169,6 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
       ...synced,
       ...(id.endsWith('.switch') && value === true ? { mcbTripped: false } : {}),
     });
-    const sess = useSessionStore.getState();
     try {
       const stage = getStage(getExperiment(sess.experimentId), sess.currentStageIndex);
       if (stage.twoReadingCapture?.invalidationControlIds.includes(id)) {
@@ -190,7 +210,13 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
   },
 
   setSupplyOn: (supplyOn) => {
-    const swId = 'sup3.switch' in get().values ? 'sup3.switch' : 'sup.switch';
+    const vals = get().values;
+    const swId =
+      'sup3.switch' in vals
+        ? 'sup3.switch'
+        : 'dcSupply.switch' in vals
+          ? 'dcSupply.switch'
+          : 'sup.switch';
     get().setControlValue(swId, supplyOn);
   },
 
@@ -201,7 +227,12 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
 
   tripMcb: () =>
     set((state) => {
-      const swId = 'sup3.switch' in state.values ? 'sup3.switch' : 'sup.switch';
+      const swId =
+        'sup3.switch' in state.values
+          ? 'sup3.switch'
+          : 'dcSupply.switch' in state.values
+            ? 'dcSupply.switch'
+            : 'sup.switch';
       return {
         supplyOn: false,
         mcbTripped: true,
@@ -294,7 +325,9 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
       values[ctrl.id] = ctrl.defaultValue;
     }
 
-    const sw = controls.find((c) => c.id === 'sup.switch' || c.id === 'sup3.switch');
+    const sw = controls.find(
+      (c) => c.id === 'sup.switch' || c.id === 'sup3.switch' || c.id === 'dcSupply.switch',
+    );
     const knob = controls.find((c) => c.id === 'va.knob' || c.id === 'va3.knob');
     const vSel = controls.find((c) => c.id === 'wm.vRange');
     const iSel = controls.find((c) => c.id === 'wm.iRange');

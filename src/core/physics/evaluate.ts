@@ -34,6 +34,7 @@ export interface ExperimentEvaluation<
 export function getSupplySwitchId(
   controls: ControlValues | Record<string, unknown>,
 ): string {
+  if ('dcSupply.switch' in controls) return 'dcSupply.switch';
   if ('sup3.switch' in controls) return 'sup3.switch';
   return 'sup.switch';
 }
@@ -42,7 +43,9 @@ export function isSupplySwitchOn(
   controls: ControlValues | TransformerLoadControls,
 ): boolean {
   const vals = toControlValues(controls);
-  return Boolean(vals['sup.switch'] ?? vals['sup3.switch']);
+  return Boolean(
+    vals['sup.switch'] ?? vals['sup3.switch'] ?? vals['dcSupply.switch'],
+  );
 }
 
 export function toControlValues(
@@ -51,7 +54,8 @@ export function toControlValues(
   if (
     'supplyOn' in controls &&
     !('sup.switch' in controls) &&
-    !('sup3.switch' in controls)
+    !('sup3.switch' in controls) &&
+    !('dcSupply.switch' in controls)
   ) {
     const legacy = controls as TransformerLoadControls;
     return {

@@ -13,6 +13,8 @@ export type WireEndpointPair = [TerminalId, TerminalId];
 export type ComponentType =
   | 'acSupply'
   | 'acSupply3ph'
+  | 'dcSupply'
+  | 'potDivider'
   | 'variac1ph'
   | 'variac3ph'
   | 'wattmeter'
@@ -66,6 +68,7 @@ export type ControlDef =
       kind: 'switch';
       label: string;
       defaultValue: boolean;
+      lockWhenSupplyOn?: boolean;
     }
   | {
       id: string;
@@ -367,6 +370,7 @@ export interface StageDef {
   probeEnabled?: boolean;
   identificationMode?: 'winding-pairs' | 'phase-groups';
   twoReadingCapture?: TwoReadingCaptureSpec;
+  rowGroupColumnId?: string;
 }
 
 export interface ExperimentDef {

@@ -13,6 +13,7 @@ interface InductionMotor3phProps {
   t1Kgf?: number;
   t2Kgf?: number;
   loadF?: number;
+  rotorBlocked?: boolean;
 }
 
 export function InductionMotor3ph({
@@ -21,10 +22,12 @@ export function InductionMotor3ph({
   t1Kgf = 1.0,
   t2Kgf = 1.0,
   loadF = 0,
+  rotorBlocked = false,
 }: InductionMotor3phProps) {
   const def = getComponentDef(instance.type);
   const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
   const rotorRef = useRef<Group>(null);
+  const hideBrake = Boolean(instance.params.hideBrake);
 
   useFrame((_, delta) => {
     if (!rotorRef.current || rpm <= 0.5) return;
@@ -81,25 +84,35 @@ export function InductionMotor3ph({
         </mesh>
       </group>
 
-      {/* Brake belt + upright spring balance stand */}
-      <mesh position={[0.58, 0.56, -0.34]} castShadow>
-        <boxGeometry args={[0.52, 0.9, 0.06]} />
-        <meshStandardMaterial color="#334155" metalness={0.4} roughness={0.6} />
-      </mesh>
-      {/* Left & right spring balance columns S1 and S2 */}
-      <mesh position={[0.42, 0.72, -0.22]} castShadow>
-        <cylinderGeometry args={[0.045, 0.045, 0.36, 12]} />
-        <meshStandardMaterial color={beltTight ? '#ef4444' : '#64748b'} roughness={0.4} />
-      </mesh>
-      <mesh position={[0.72, 0.72, -0.22]} castShadow>
-        <cylinderGeometry args={[0.045, 0.045, 0.36, 12]} />
-        <meshStandardMaterial color={beltTight ? '#38bdf8' : '#64748b'} roughness={0.4} />
-      </mesh>
-      {/* Friction belt collar around pulley */}
-      <mesh position={[0.58, 0.42, -0.04]} rotation={[Math.PI / 2, 0, Math.PI / 2]}>
-        <torusGeometry args={[0.215, 0.022, 10, 28, Math.PI * 1.4]} />
-        <meshStandardMaterial color="#1f2937" roughness={0.9} />
-      </mesh>
+      {/* Brake belt + upright spring balance stand (hidden in No-Load/Blocked-Rotor/DC tests) */}
+      {!hideBrake && (
+        <>
+          <mesh position={[0.58, 0.56, -0.34]} castShadow>
+            <boxGeometry args={[0.52, 0.9, 0.06]} />
+            <meshStandardMaterial color="#334155" metalness={0.4} roughness={0.6} />
+          </mesh>
+          <mesh position={[0.42, 0.72, -0.22]} castShadow>
+            <cylinderGeometry args={[0.045, 0.045, 0.36, 12]} />
+            <meshStandardMaterial color={beltTight ? '#ef4444' : '#64748b'} roughness={0.4} />
+          </mesh>
+          <mesh position={[0.72, 0.72, -0.22]} castShadow>
+            <cylinderGeometry args={[0.045, 0.045, 0.36, 12]} />
+            <meshStandardMaterial color={beltTight ? '#38bdf8' : '#64748b'} roughness={0.4} />
+          </mesh>
+          <mesh position={[0.58, 0.42, -0.04]} rotation={[Math.PI / 2, 0, Math.PI / 2]}>
+            <torusGeometry args={[0.215, 0.022, 10, 28, Math.PI * 1.4]} />
+            <meshStandardMaterial color="#1f2937" roughness={0.9} />
+          </mesh>
+        </>
+      )}
+
+      {/* Shaft locking pin when rotorBlocked is engaged */}
+      {rotorBlocked && (
+        <mesh position={[0.58, 0.28, 0.1]} castShadow>
+          <cylinderGeometry args={[0.035, 0.035, 0.34, 12]} />
+          <meshStandardMaterial color="#ef4444" emissive="#991b1b" emissiveIntensity={0.4} />
+        </mesh>
+      )}
 
       <LabelPlate
         text="3φ INDUCTION MOTOR"
@@ -114,7 +127,7 @@ export function InductionMotor3ph({
         rotation={[-Math.PI / 2, 0, 0]}
       />
 
-      {showNumericReadouts && (
+      {showNumericReadouts && !hideBrake && (
         <LabelPlate
           text={`${Math.round(rpm)} RPM`}
           subtext={`S1 ${t1Kgf.toFixed(1)} · S2 ${t2Kgf.toFixed(1)} kgf`}
@@ -125,6 +138,19 @@ export function InductionMotor3ph({
           fg={rpm > 5 ? '#34d399' : '#94a3b8'}
           border="#334155"
           position={[0.56, 1.04, -0.2]}
+        />
+      )}
+      {showNumericReadouts && hideBrake && (
+        <LabelPlate
+          text={rotorBlocked ? 'LOCKED (0 RPM)' : `${Math.round(rpm)} RPM`}
+          subtext={rotorBlocked ? 'Pin Engaged' : 'Free Shaft'}
+          width={0.62}
+          height={0.18}
+          fontSize={24}
+          bg="#0f172a"
+          fg={rotorBlocked ? '#f87171' : rpm > 5 ? '#34d399' : '#94a3b8'}
+          border={rotorBlocked ? '#ef4444' : '#334155'}
+          position={[0.56, 0.88, -0.1]}
         />
       )}
 
