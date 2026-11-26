@@ -163,6 +163,19 @@ function saveProgress(progress: StoredProgress): void {
   }
 }
 
+export interface CapturedDualSlot {
+  dial: number;
+  mf: number;
+  reverseOn: boolean;
+  signedDiv: number;
+}
+
+export interface PendingDualReading {
+  first?: CapturedDualSlot;
+  second?: CapturedDualSlot;
+  signature: string;
+}
+
 export type AppScreen = 'picker' | 'mode' | 'lab';
 export type LabMode = 'self' | 'learn' | 'observe';
 
@@ -208,6 +221,7 @@ interface SessionState {
   activeProbeLead: 'a' | 'b' | null;
   identifiedPairs: [TerminalId, TerminalId][];
   identifiedPhases: string[][];
+  pendingDualReading: PendingDualReading | null;
 
   // Learn mode per-run state (never persisted mid-lesson)
   learnStepIndex: number;
@@ -278,6 +292,13 @@ interface SessionState {
   setIdentifiedPairs: (pairs: [TerminalId, TerminalId][]) => void;
   setIdentifiedPhases: (groups: string[][]) => void;
 
+  captureDualReading: (
+    slot: 'first' | 'second',
+    output: PhysicsSolveOutput,
+    controls: ControlValues,
+  ) => void;
+  clearPendingDualReading: () => void;
+
   setLearnStepIndex: (index: number) => void;
   ackLearnReading: () => void;
   resetLearnAck: () => void;
@@ -297,15 +318,20 @@ function getStageMeterIds(experimentId: string, stageIndex: number): string[] {
     const exp = getExperiment(experimentId);
     const stage = getStage(exp, stageIndex);
     const comps = getStageComponents(exp, stage);
-    return comps
-      .filter(
-        (c) =>
-          c.type === 'voltmeter' ||
-          c.type === 'probeVoltmeter' ||
-          c.type === 'ammeter' ||
-          c.type === 'wattmeter',
-      )
-      .map((c) => c.id);
+    return comps.flatMap((c) => {
+      if (
+        c.type === 'voltmeter' ||
+        c.type === 'probeVoltmeter' ||
+        c.type === 'ammeter' ||
+        c.type === 'wattmeter'
+      ) {
+        return [c.id];
+      }
+      if (c.type === 'inductionMotor3ph') {
+        return ['s1', 's2', 'tacho'];
+      }
+      return [];
+    });
   } catch {
     return ['vp', 'vs', 'am', 'wm'];
   }
@@ -347,6 +373,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   activeProbeLead: null,
   identifiedPairs: [],
   identifiedPhases: [],
+  pendingDualReading: null,
 
   learnStepIndex: 0,
   learnNoLoadAck: false,
@@ -394,6 +421,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       activeProbeLead: null,
       identifiedPairs: [],
       identifiedPhases: [],
+      pendingDualReading: null,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -726,11 +754,38 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const stageRows = observationRowsByStage[stage.id] ?? [];
     if (stageRows.length >= MAX_OBSERVATION_ROWS) return;
 
+    let enrichedControls = controlValues;
+    let shouldClearPending = false;
+    if (stage.twoReadingCapture) {
+      const pending = get().pendingDualReading;
+      const spec = stage.twoReadingCapture;
+      const sig = spec.invalidationControlIds
+        .map((id) => String(controlValues[id] ?? ''))
+        .join('|');
+      if (
+        !pending ||
+        pending.signature !== sig ||
+        !pending.first ||
+        !pending.second
+      ) {
+        return;
+      }
+      enrichedControls = {
+        ...controlValues,
+        'pending.w1Div': pending.first.dial,
+        'pending.w1Rev': pending.first.reverseOn,
+        'pending.w2Div': pending.second.dial,
+        'pending.w2Rev': pending.second.reverseOn,
+        'pending.wmMf': pending.second.mf ?? pending.first.mf,
+      };
+      shouldClearPending = true;
+    }
+
     rowCounter += 1;
     const row = captureObservationRow(
       stage,
       output,
-      controlValues,
+      enrichedControls,
       stageRows.length + 1,
       `obs_${rowCounter}`,
     );
@@ -754,6 +809,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       },
       observationRows: nextStageRows,
       runCheckResult: null,
+      ...(shouldClearPending ? { pendingDualReading: null } : {}),
     });
   },
 
@@ -952,6 +1008,59 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   setIdentifiedPhases: (identifiedPhases) => set({ identifiedPhases }),
 
+  captureDualReading: (slot, output, controls) => {
+    const { experimentId, currentStageIndex, pendingDualReading, pushToast } = get();
+    const exp = getExperiment(experimentId);
+    const stage = getStage(exp, currentStageIndex);
+    const spec = stage.twoReadingCapture;
+    if (!spec) return;
+
+    const supplyOn = isSupplySwitchOn(controls);
+    if (!supplyOn) return;
+
+    const meters = Array.isArray(output.meters) ? output.meters : [];
+    const wm = meters.find((m) => m.id === spec.meterId);
+    if (!wm || wm.damaged) return;
+
+    if (wm.reversed) {
+      pushToast({
+        id: 'dual-rev-needed',
+        severity: 'warning',
+        message:
+          'Wattmeter pointer is below zero. Flip the Reverse (REV) switch ON before capturing W1, then record it as negative.',
+      });
+      return;
+    }
+
+    const sig = spec.invalidationControlIds
+      .map((id) => String(controls[id] ?? ''))
+      .join('|');
+    const revOn = spec.reverseControlId ? Boolean(controls[spec.reverseControlId]) : false;
+    const dial = Number((wm.dial ?? wm.shownValue ?? 0).toFixed(2));
+    const mf = wm.mf ?? 1;
+    const captured: CapturedDualSlot = {
+      dial,
+      mf,
+      reverseOn: revOn,
+      signedDiv: revOn ? -Math.abs(dial) : dial,
+    };
+
+    const base =
+      pendingDualReading && pendingDualReading.signature === sig
+        ? pendingDualReading
+        : { signature: sig };
+
+    set({
+      pendingDualReading: {
+        ...base,
+        [slot]: captured,
+        signature: sig,
+      },
+    });
+  },
+
+  clearPendingDualReading: () => set({ pendingDualReading: null }),
+
   setLearnStepIndex: (learnStepIndex) => set({ learnStepIndex }),
 
   ackLearnReading: () => set({ learnNoLoadAck: true }),
@@ -996,6 +1105,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       activeProbeLead: null,
       identifiedPairs: [],
       identifiedPhases: [],
+      pendingDualReading: null,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
@@ -1037,6 +1147,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       activeProbeLead: null,
       identifiedPairs: [],
       identifiedPhases: [],
+      pendingDualReading: null,
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,

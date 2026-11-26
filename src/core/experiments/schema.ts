@@ -35,6 +35,9 @@ const ComponentTypeSchema = z.enum([
   'transformer3phTrue',
   'transformerCenterTap',
   'transformerTeaser',
+  'inductionMotor3ph',
+  'currentTransformer',
+  'selectorSwitch',
   'voltmeter',
   'probeVoltmeter',
   'ammeter',
@@ -300,6 +303,18 @@ const StageDefSchema = z.object({
   carryOver: z.enum(['none', 'consistent-wires']).optional(),
   probeEnabled: z.boolean().optional(),
   identificationMode: z.enum(['winding-pairs', 'phase-groups']).optional(),
+  twoReadingCapture: z
+    .object({
+      selectorControlId: z.string().min(1),
+      firstOption: z.string().min(1),
+      secondOption: z.string().min(1),
+      firstLabel: z.string().min(1),
+      secondLabel: z.string().min(1),
+      invalidationControlIds: z.array(z.string().min(1)),
+      meterId: z.string().min(1),
+      reverseControlId: z.string().min(1).optional(),
+    })
+    .optional(),
 });
 
 export const ExperimentDefSchema = z

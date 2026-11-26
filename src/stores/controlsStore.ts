@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { getStage } from '../core/circuit/stages';
+import { getExperiment } from '../core/experiments/registry';
 import { checkPowerOnSafety } from '../core/physics/evaluate';
 import { drawSessionMeterGains } from '../core/physics/meters';
 import type {
@@ -146,6 +148,15 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
       ...synced,
       ...(id.endsWith('.switch') && value === true ? { mcbTripped: false } : {}),
     });
+    const sess = useSessionStore.getState();
+    try {
+      const stage = getStage(getExperiment(sess.experimentId), sess.currentStageIndex);
+      if (stage.twoReadingCapture?.invalidationControlIds.includes(id)) {
+        sess.clearPendingDualReading();
+      }
+    } catch {
+      // ignore during uninitialized store
+    }
   },
 
   stepControlValue: (id, delta, min, max, precisionStep) => {
@@ -156,6 +167,15 @@ export const useControlsStore = create<ControlsState>((set, get) => ({
     const nextValues = { ...state.values, [id]: next };
     const synced = syncLegacyFromValues(nextValues, state);
     set({ values: nextValues, ...synced });
+    const sess = useSessionStore.getState();
+    try {
+      const stage = getStage(getExperiment(sess.experimentId), sess.currentStageIndex);
+      if (stage.twoReadingCapture?.invalidationControlIds.includes(id)) {
+        sess.clearPendingDualReading();
+      }
+    } catch {
+      // ignore
+    }
   },
 
   cycleControlOption: (id, options) => {
