@@ -725,6 +725,117 @@ const DEFAULT_PROCEDURES: Record<
       };
     },
   },
+  'ex4.2': {
+    runStage: ({ experiment, stageIndex, seed, gains }) => {
+      const stage = getStage(experiment, stageIndex);
+      const wires = wiresFromNetlist(stage.acceptedNetlists[0], []);
+
+      if (stage.id === 'dc-test') {
+        const dcCtrl: ControlValues = {
+          'dcSupply.switch': true,
+          'pot.p': 0.5,
+        };
+        const out = evaluateExperimentPhysics(experiment, wires, dcCtrl, gains, {
+          stageIndex,
+          seed,
+        });
+        return [captureObservationRow(stage, out.output, dcCtrl, 1, 'im42_dc_1')];
+      }
+
+      const captureAcRow = (
+        rowId: string,
+        sno: number,
+        rotorBlocked: boolean,
+        variacV: number,
+      ) => {
+        const readSel = (pos: 'B' | 'C', reverseOn: boolean) =>
+          evaluateExperimentPhysics(
+            experiment,
+            wires,
+            {
+              'sup3.switch': true,
+              'va3.knob': variacV,
+              'wm.vRange': 300,
+              'wm.iRange': 5,
+              'wm.reverse': reverseOn,
+              'sel.pos': pos,
+              'motor.rotorBlocked': rotorBlocked,
+            },
+            gains,
+            { stageIndex, seed },
+          );
+
+        let w1Rev = false;
+        let outB = readSel('B', false);
+        let wmB = findMeterReading(outB.output, 'wm');
+        if (wmB?.reversed) {
+          w1Rev = true;
+          outB = readSel('B', true);
+          wmB = findMeterReading(outB.output, 'wm');
+        }
+
+        const outC = readSel('C', false);
+        const wmC = findMeterReading(outC.output, 'wm');
+
+        const controls: ControlValues = {
+          'sup3.switch': true,
+          'va3.knob': variacV,
+          'wm.vRange': 300,
+          'wm.iRange': 5,
+          'wm.reverse': false,
+          'sel.pos': 'C',
+          'motor.rotorBlocked': rotorBlocked,
+          'pending.w1Div': wmB?.dial ?? 0,
+          'pending.w1Rev': w1Rev,
+          'pending.w2Div': wmC?.dial ?? 0,
+          'pending.w2Rev': false,
+          'pending.wmMf': wmC?.mf ?? 10,
+        };
+        return captureObservationRow(stage, outC.output, controls, sno, rowId);
+      };
+
+      return [
+        captureAcRow('im42_nl_1', 1, false, 230),
+        captureAcRow('im42_br_2', 2, true, 42.7),
+      ];
+    },
+    computeAnswers: (rowsByStage) => {
+      const dcRows = rowsByStage['dc-test'] ?? [];
+      const acRows = rowsByStage['noload-blocked'] ?? [];
+      const dcRow = dcRows[0];
+      const nlRow = acRows.find((r) => !r.values?.rotorBlocked) ?? acRows[0];
+      const brRow = acRows.find((r) => Boolean(r.values?.rotorBlocked)) ?? acRows[1];
+
+      const vdc = getRowNumber(dcRow, 'Vdc');
+      const idc = getRowNumber(dcRow, 'Idc');
+      const r1 = 1.15 * 1.5 * (vdc / idc);
+
+      const vol = getRowNumber(nlRow, 'V');
+      const iol = getRowNumber(nlRow, 'I');
+      const po = getRowNumber(nlRow, 'P');
+      const Zo = (Math.sqrt(3) * vol) / iol;
+      const rc = (3 * vol * vol) / Math.max(1e-3, po - iol * iol * r1);
+      const xm = 1 / Math.sqrt(Math.max(1e-12, 1 / (Zo * Zo) - 1 / (rc * rc)));
+
+      const vbr = getRowNumber(brRow, 'V');
+      const ibr = getRowNumber(brRow, 'I');
+      const pbr = getRowNumber(brRow, 'P');
+      const ZBR = (Math.sqrt(3) * vbr) / ibr;
+      const R = pbr / (ibr * ibr);
+      const X = Math.sqrt(Math.max(0, ZBR * ZBR - R * R));
+
+      return {
+        r1,
+        Zo,
+        rc,
+        xm,
+        ZBR,
+        R,
+        X,
+        noLoadCurrentReason: 'air-gap',
+      };
+    },
+  },
 };
 
 /**

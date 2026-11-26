@@ -6,6 +6,7 @@ import { ex3_4 } from './ex3_4';
 import { ex3_5 } from './ex3_5';
 import { ex3_6 } from './ex3_6';
 import { ex4_1 } from './ex4_1';
+import { ex4_2 } from './ex4_2';
 import { ExperimentDefSchema } from './schema';
 import type {
   ExperimentDef,
@@ -15,7 +16,7 @@ import type {
   WireEndpointPair,
 } from '../types';
 
-const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1, ex3_2, ex3_3, ex3_4, ex3_5, ex3_6, ex4_1];
+const RAW_EXPERIMENTS: ExperimentDef[] = [ex3_1, ex3_2, ex3_3, ex3_4, ex3_5, ex3_6, ex4_1, ex4_2];
 
 export const EXPERIMENTS: Record<string, ExperimentDef> = Object.fromEntries(
   RAW_EXPERIMENTS.map((exp) => {
@@ -79,7 +80,7 @@ export const EXPERIMENT_SUMMARIES: ExperimentSummary[] = [
     number: '4.2',
     title: 'No-load and blocked-rotor tests of three-phase induction motor',
     group: 'induction',
-    available: false,
+    available: true,
   },
   {
     id: 'ex4.5',

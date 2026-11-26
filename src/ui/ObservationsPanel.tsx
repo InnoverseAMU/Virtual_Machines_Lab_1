@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { getStage } from '../core/circuit/stages';
 import { isSupplySwitchOn } from '../core/physics/evaluate';
 import {
@@ -271,56 +271,96 @@ export function ObservationsPanel({
                     </td>
                   </tr>
                 ) : (
-                  observationRows.map((row) => {
-                    const violations = evaluateRowRules(stage, row);
-                    const isAmber = violations.some((v) => v.amber);
-                    const highlightedCols = new Set(
-                      violations.flatMap((v) => v.highlightColumnIds),
-                    );
-                    const rowTooltip = violations.map((v) => v.message).join(' ');
-
-                    return (
-                      <tr
-                        key={row.id}
-                        className={isAmber ? 'bg-amber-500/20' : ''}
-                        style={{ borderTop: '1px solid var(--vml-border)' }}
-                        title={rowTooltip || undefined}
-                      >
-                        {visibleColumns.map((col, idx) => {
-                          const val =
-                            col.source.kind === 'derived'
-                              ? evaluateColumnValue(
-                                  col,
-                                  row.values,
-                                  stage.physicsParams,
-                                )
-                              : getRowValue(row, col.id);
-                          const isColAmber =
-                            isAmber && highlightedCols.has(col.id);
-                          return (
-                            <td
-                              key={col.id}
-                              className={`px-1 py-1 ${
-                                idx === 0 ? 'px-1.5 text-left font-bold' : ''
-                              } ${isColAmber ? 'font-bold text-amber-400' : ''}`}
-                            >
-                              {formatCellValue(col, val)}
-                            </td>
-                          );
-                        })}
-                        <td className="px-1 py-1 text-center">
-                          <button
-                            type="button"
-                            onClick={() => deleteObservationRow(row.id)}
-                            aria-label={`Delete row ${row.sno}`}
-                            className="rounded px-1 text-red-400 hover:bg-red-500/20"
+                  (() => {
+                    const groupColId = stage.rowGroupColumnId;
+                    const orderedGroups: Array<{ label: string | null; rows: typeof observationRows }> = [];
+                    if (groupColId) {
+                      const map = new Map<string, typeof observationRows>();
+                      for (const r of observationRows) {
+                        const key = String(getRowValue(r, groupColId) ?? 'Other');
+                        const list = map.get(key) ?? [];
+                        list.push(r);
+                        map.set(key, list);
+                      }
+                      for (const [label, rows] of map) {
+                        orderedGroups.push({ label, rows });
+                      }
+                    } else {
+                      orderedGroups.push({ label: null, rows: observationRows });
+                    }
+                    return orderedGroups.flatMap((grp) => {
+                      const items: ReactNode[] = [];
+                      if (grp.label !== null) {
+                        items.push(
+                          <tr
+                            key={`group-${grp.label}`}
+                            style={{
+                              backgroundColor: 'var(--vml-panel-hover)',
+                              borderTop: '1px solid var(--vml-border)',
+                            }}
                           >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                            <td
+                              colSpan={visibleColumns.length + 1}
+                              className="px-2 py-1 text-left font-sans text-[10px] font-semibold uppercase tracking-wider"
+                              style={{ color: 'var(--vml-accent)' }}
+                            >
+                              {grp.label} Section
+                            </td>
+                          </tr>,
+                        );
+                      }
+                      for (const row of grp.rows) {
+                        const violations = evaluateRowRules(stage, row);
+                        const isAmber = violations.some((v) => v.amber);
+                        const highlightedCols = new Set(
+                          violations.flatMap((v) => v.highlightColumnIds),
+                        );
+                        const rowTooltip = violations.map((v) => v.message).join(' ');
+                        items.push(
+                          <tr
+                            key={row.id}
+                            className={isAmber ? 'bg-amber-500/20' : ''}
+                            style={{ borderTop: '1px solid var(--vml-border)' }}
+                            title={rowTooltip || undefined}
+                          >
+                            {visibleColumns.map((col, idx) => {
+                              const val =
+                                col.source.kind === 'derived'
+                                  ? evaluateColumnValue(
+                                      col,
+                                      row.values,
+                                      stage.physicsParams,
+                                    )
+                                  : getRowValue(row, col.id);
+                              const isColAmber =
+                                isAmber && highlightedCols.has(col.id);
+                              return (
+                                <td
+                                  key={col.id}
+                                  className={`px-1 py-1 ${
+                                    idx === 0 ? 'px-1.5 text-left font-bold' : ''
+                                  } ${isColAmber ? 'font-bold text-amber-400' : ''}`}
+                                >
+                                  {formatCellValue(col, val)}
+                                </td>
+                              );
+                            })}
+                            <td className="px-1 py-1 text-center">
+                              <button
+                                type="button"
+                                onClick={() => deleteObservationRow(row.id)}
+                                aria-label={`Delete row ${row.sno}`}
+                                className="rounded px-1 text-red-400 hover:bg-red-500/20"
+                              >
+                                ×
+                              </button>
+                            </td>
+                          </tr>,
+                        );
+                      }
+                      return items;
+                    });
+                  })()
                 )}
               </tbody>
             </table>

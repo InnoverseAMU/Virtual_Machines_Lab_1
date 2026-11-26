@@ -14,6 +14,21 @@ export const COMPONENT_DEFS: Record<ComponentType, ComponentTypeDef> = {
       { name: 'N', label: 'Neutral (N)', localPos: [0.18, 0.25, 0.37] },
     ],
   },
+  dcSupply: {
+    type: 'dcSupply',
+    terminals: [
+      { name: '+', label: 'DC Positive (+)', localPos: [-0.18, 0.25, 0.37] },
+      { name: '-', label: 'DC Negative (-)', localPos: [0.18, 0.25, 0.37] },
+    ],
+  },
+  potDivider: {
+    type: 'potDivider',
+    terminals: [
+      { name: 'IN+', label: 'Input (+)', localPos: [-0.34, 0.2, 0.44] },
+      { name: 'OUT', label: 'Slider Out', localPos: [0, 0.2, 0.44] },
+      { name: 'IN-', label: 'Input (-)', localPos: [0.34, 0.2, 0.44] },
+    ],
+  },
   variac1ph: {
     type: 'variac1ph',
     terminals: [

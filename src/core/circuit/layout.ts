@@ -4,6 +4,8 @@ import type { ComponentInstance, ComponentType, TerminalId } from '../types';
 export const COMPONENT_FOOTPRINTS: Record<ComponentType, [number, number, number]> = {
   acSupply: [1.04, 0.86, 0.84],
   acSupply3ph: [1.18, 0.92, 0.88],
+  dcSupply: [1.04, 0.86, 0.84],
+  potDivider: [1.36, 0.88, 0.96],
   variac1ph: [1.12, 0.94, 1.06],
   variac3ph: [1.32, 1.04, 1.12],
   wattmeter: [1.14, 0.72, 1.04],

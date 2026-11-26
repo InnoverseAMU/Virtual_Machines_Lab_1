@@ -115,7 +115,13 @@ const ControlsSection = memo(function ControlsSection({
         {controls.map((ctrl) => {
           if (ctrl.kind === 'switch') {
             const isOn = Boolean(values[ctrl.id]);
-            const isSupply = ctrl.id === 'sup.switch' || ctrl.id === 'sup3.switch';
+            const isSupply =
+              ctrl.id === 'sup.switch' ||
+              ctrl.id === 'sup3.switch' ||
+              ctrl.id === 'dcSupply.switch';
+            const lockedBySupply = Boolean(
+              ctrl.lockWhenSupplyOn && isSupplySwitchOn(values),
+            );
             return (
               <div key={ctrl.id} className="space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
@@ -124,9 +130,15 @@ const ControlsSection = memo(function ControlsSection({
                 </div>
                 <button
                   type="button"
+                  disabled={lockedBySupply}
+                  title={
+                    lockedBySupply
+                      ? 'Shut off the supply before toggling this switch.'
+                      : undefined
+                  }
                   onClick={() => setControlValue(ctrl.id, !isOn)}
                   aria-pressed={isOn}
-                  className={`w-full rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`w-full rounded-lg px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                     isOn
                       ? 'bg-emerald-600 text-white hover:bg-emerald-500'
                       : isSupply && mcbTripped
@@ -144,6 +156,11 @@ const ControlsSection = memo(function ControlsSection({
                       ? `${ctrl.label}: ON`
                       : `${ctrl.label}: OFF`}
                 </button>
+                {lockedBySupply && (
+                  <p className="text-[10px] text-amber-400">
+                    Shut off supply to change this lock.
+                  </p>
+                )}
               </div>
             );
           }
