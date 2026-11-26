@@ -388,6 +388,53 @@ export function ObservationsPanel({
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                {experiment.phasorReport === 'transformations' ? (
+                  <>
+                    <div
+                      className="rounded-lg p-1.5"
+                      style={{ backgroundColor: 'var(--vml-panel-hover)' }}
+                    >
+                      <svg viewBox="0 0 100 100" className="mx-auto h-20 w-20">
+                        <line x1="25" y1="75" x2="60" y2="75" stroke="#ef4444" strokeWidth="2" />
+                        <line x1="60" y1="75" x2="43" y2="45" stroke="#eab308" strokeWidth="2" />
+                        <line x1="43" y1="45" x2="78" y2="45" stroke="#3b82f6" strokeWidth="2" />
+                        <line x1="25" y1="75" x2="78" y2="45" stroke="#38bdf8" strokeDasharray="3 2" strokeWidth="1.8" />
+                      </svg>
+                      <div className="font-semibold">3φ → 1φ</div>
+                      <div style={{ color: 'var(--vml-text-muted)' }}>Va1c1 = 2·Vp</div>
+                    </div>
+                    <div
+                      className="rounded-lg p-1.5"
+                      style={{ backgroundColor: 'var(--vml-panel-hover)' }}
+                    >
+                      <svg viewBox="0 0 100 100" className="mx-auto h-20 w-20">
+                        <line x1="50" y1="50" x2="84" y2="50" stroke="#ef4444" strokeWidth="1.8" />
+                        <line x1="50" y1="50" x2="67" y2="21" stroke="#eab308" strokeWidth="1.8" />
+                        <line x1="50" y1="50" x2="33" y2="21" stroke="#3b82f6" strokeWidth="1.8" />
+                        <line x1="50" y1="50" x2="16" y2="50" stroke="#f97316" strokeWidth="1.8" />
+                        <line x1="50" y1="50" x2="33" y2="79" stroke="#22c55e" strokeWidth="1.8" />
+                        <line x1="50" y1="50" x2="67" y2="79" stroke="#a855f7" strokeWidth="1.8" />
+                        <polygon points="84,50 67,21 33,21 16,50 33,79 67,79" fill="none" stroke="#94a3b8" strokeDasharray="3 2" strokeWidth="1" />
+                      </svg>
+                      <div className="font-semibold">3φ → 6φ</div>
+                      <div style={{ color: 'var(--vml-text-muted)' }}>60° Double-Star</div>
+                    </div>
+                    <div
+                      className="rounded-lg p-1.5"
+                      style={{ backgroundColor: 'var(--vml-panel-hover)' }}
+                    >
+                      <svg viewBox="0 0 100 100" className="mx-auto h-20 w-20">
+                        <line x1="25" y1="78" x2="75" y2="78" stroke="#ef4444" strokeWidth="2.2" />
+                        <line x1="50" y1="78" x2="50" y2="28" stroke="#3b82f6" strokeWidth="2.2" />
+                        <line x1="25" y1="78" x2="50" y2="28" stroke="#94a3b8" strokeDasharray="3 2" strokeWidth="1.4" />
+                        <rect x="50" y="70" width="8" height="8" fill="none" stroke="#cbd5e1" strokeWidth="1" />
+                      </svg>
+                      <div className="font-semibold">Scott (2φ)</div>
+                      <div style={{ color: 'var(--vml-text-muted)' }}>90° · √2·V2</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
                 <div
                   className="rounded-lg p-1.5"
                   style={{ backgroundColor: 'var(--vml-panel-hover)' }}
@@ -429,6 +476,8 @@ export function ObservationsPanel({
                   <div className="font-semibold">Zig-Zag</div>
                   <div style={{ color: 'var(--vml-text-muted)' }}>VL = 1.5·Vp</div>
                 </div>
+                  </>
+                )}
               </div>
             </div>
           )}
