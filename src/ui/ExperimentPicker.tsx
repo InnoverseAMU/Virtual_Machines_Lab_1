@@ -9,6 +9,7 @@ export function ExperimentPicker() {
   const usedSolutionByExperiment = useSessionStore(
     (s) => s.usedSolutionByExperiment,
   );
+  const learnCompleted = useSessionStore((s) => s.learnCompleted);
   const selectExperiment = useSessionStore((s) => s.selectExperiment);
   const goToScreen = useSessionStore((s) => s.goToScreen);
 
@@ -19,6 +20,7 @@ export function ExperimentPicker() {
 
   const renderCard = (exp: ExperimentSummary) => {
     const isCompleted = completedExperiments.includes(exp.id);
+    const isLearnDone = Boolean(learnCompleted[exp.id]);
     const attemptCount = attempts[exp.id] ?? 0;
     const usedSol = Boolean(usedSolutionByExperiment[exp.id]);
 
@@ -98,8 +100,19 @@ export function ExperimentPicker() {
             className="flex flex-wrap items-center justify-between gap-2 text-xs"
             style={{ color: 'var(--vml-text-muted)' }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1">
               <span>Attempts: {attemptCount}</span>
+              {isLearnDone && (
+                <span
+                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    backgroundColor: 'var(--vml-panel-hover)',
+                    border: '1px solid var(--vml-border)',
+                  }}
+                >
+                  Learn completed
+                </span>
+              )}
               {usedSol && (
                 <span
                   className="rounded px-1.5 py-0.5 text-[10px] font-semibold"

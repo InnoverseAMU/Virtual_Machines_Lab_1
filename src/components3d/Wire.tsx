@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import type { ComponentInstance, Wire } from '../core/types';
 import { useControlsStore } from '../stores/controlsStore';
+import { useSessionStore } from '../stores/sessionStore';
 import { useWiringStore } from '../stores/wiringStore';
 import { NET_WIRE_COLORS } from '../theme/tokens';
 import { getTerminalWorldPos } from './terminalPos';
@@ -29,6 +30,8 @@ export function WireMesh({
   const matRef = useRef<THREE.MeshStandardMaterial>(null);
   const removeWire = useWiringStore((s) => s.removeWire);
   const supplyOn = useControlsStore((s) => s.supplyOn);
+  const mode = useSessionStore((s) => s.mode);
+  const locked = readOnly || ghost || mode === 'learn';
 
   const startPos = useMemo(
     () => getTerminalWorldPos(components, wire.a),
@@ -115,19 +118,19 @@ export function WireMesh({
       geometry={geometry}
       castShadow={!ghost}
       onClick={(e) => {
-        if (readOnly || ghost) return;
+        if (locked) return;
         e.stopPropagation();
         removeWire(wire.id, supplyOn);
         document.body.style.cursor = 'auto';
       }}
       onPointerOver={(e) => {
-        if (readOnly || ghost) return;
+        if (locked) return;
         e.stopPropagation();
         setHovered(true);
         document.body.style.cursor = 'pointer';
       }}
       onPointerOut={(e) => {
-        if (readOnly || ghost) return;
+        if (locked) return;
         e.stopPropagation();
         setHovered(false);
         document.body.style.cursor = 'auto';

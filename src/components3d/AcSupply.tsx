@@ -9,9 +9,15 @@ interface AcSupplyProps {
   instance: ComponentInstance;
   supplyOn: boolean;
   mcbTripped: boolean;
+  controlsLocked?: boolean;
 }
 
-export function AcSupply({ instance, supplyOn, mcbTripped }: AcSupplyProps) {
+export function AcSupply({
+  instance,
+  supplyOn,
+  mcbTripped,
+  controlsLocked = false,
+}: AcSupplyProps) {
   const def = getComponentDef(instance.type);
   const toggleSupply = useControlsStore((s) => s.toggleSupply);
   const [hovered, setHovered] = useState(false);
@@ -42,10 +48,12 @@ export function AcSupply({ instance, supplyOn, mcbTripped }: AcSupplyProps) {
           position={[0, 0, 0.04]}
           onClick={(e) => {
             e.stopPropagation();
+            if (controlsLocked) return;
             toggleSupply();
           }}
           onPointerOver={(e) => {
             e.stopPropagation();
+            if (controlsLocked) return;
             setHovered(true);
             document.body.style.cursor = 'pointer';
           }}

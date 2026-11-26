@@ -1,5 +1,5 @@
 import { OrbitControls } from '@react-three/drei';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import gsap from 'gsap';
 import { useEffect, useMemo, useRef } from 'react';
 import type { ComponentRef } from 'react';
@@ -10,6 +10,7 @@ import { buildNets } from '../core/circuit/nets';
 import { getExperiment, netlistToWirePairs } from '../core/experiments/registry';
 import type {
   CameraPreset,
+  ComponentType,
   ConnectionState,
   TransformerLoadOutput,
   Wire,
@@ -24,12 +25,80 @@ const CAMERA_PRESETS: Record<
   CameraPreset,
   { pos: [number, number, number]; target: [number, number, number] }
 > = {
-  overview: { pos: [0.15, 5.7, 5.2], target: [0.15, 0.25, -0.15] },
-  supply: { pos: [-3.45, 2.5, 3.0], target: [-3.45, 0.35, -0.15] },
-  meters: { pos: [0.95, 3.1, 3.3], target: [0.95, 0.4, -0.2] },
-  transformer: { pos: [1.0, 2.6, 2.8], target: [1.0, 0.45, -0.15] },
-  load: { pos: [3.65, 2.8, 3.1], target: [3.65, 0.4, -0.15] },
+  overview: { pos: [0.25, 9.2, 8.4], target: [0.25, -1.15, 0.05] },
+  supply: { pos: [-3.45, 3.8, 4.3], target: [-3.45, -0.75, -0.15] },
+  meters: { pos: [0.05, 6.2, 6.0], target: [0.05, -1.1, -0.15] },
+  transformer: { pos: [0.15, 4.4, 4.8], target: [0.15, -0.75, 0.15] },
+  load: { pos: [2.0, 6.6, 6.3], target: [2.0, -1.2, -0.15] },
 };
+
+const COMPONENT_FOOTPRINTS: Record<ComponentType, [number, number, number]> = {
+  acSupply: [1.04, 0.86, 0.84],
+  variac1ph: [1.12, 0.94, 1.06],
+  wattmeter: [1.14, 0.72, 1.04],
+  transformer1ph: [1.34, 1.04, 1.06],
+  voltmeter: [0.96, 0.7, 0.92],
+  ammeter: [0.96, 0.7, 0.92],
+  lampLoad: [1.54, 0.98, 1.02],
+};
+
+function FocusHighlight({
+  position,
+  type,
+  color,
+}: {
+  position: [number, number, number];
+  type: ComponentType;
+  color: string;
+}) {
+  const [w, h, d] = COMPONENT_FOOTPRINTS[type];
+  const matRef = useRef<THREE.LineBasicMaterial>(null);
+  const ringRef = useRef<THREE.MeshBasicMaterial>(null);
+
+  const edgesGeom = useMemo(() => {
+    const box = new THREE.BoxGeometry(w, h, d);
+    const edges = new THREE.EdgesGeometry(box);
+    box.dispose();
+    return edges;
+  }, [w, h, d]);
+
+  useEffect(() => {
+    return () => {
+      edgesGeom.dispose();
+    };
+  }, [edgesGeom]);
+
+  useFrame(({ clock }) => {
+    const pulse = 0.65 + 0.35 * Math.sin(clock.getElapsedTime() * 4.2);
+    if (matRef.current) matRef.current.opacity = pulse;
+    if (ringRef.current) ringRef.current.opacity = 0.22 + 0.14 * pulse;
+  });
+
+  return (
+    <group position={position}>
+      {/* Glowing outline around the focused apparatus */}
+      <lineSegments position={[0, h / 2, 0]} geometry={edgesGeom}>
+        <lineBasicMaterial
+          ref={matRef}
+          color={color}
+          transparent
+          opacity={0.9}
+        />
+      </lineSegments>
+      {/* Benchtop halo */}
+      <mesh position={[0, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[w + 0.14, d + 0.14]} />
+        <meshBasicMaterial
+          ref={ringRef}
+          color={color}
+          transparent
+          opacity={0.28}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
 
 function tweenColor(
   targetColor: THREE.Color,
@@ -51,17 +120,45 @@ function tweenColor(
   });
 }
 
+function getResponsivePreset(
+  presetKey: CameraPreset,
+  viewportWidth: number,
+): { pos: [number, number, number]; target: [number, number, number] } {
+  const base = CAMERA_PRESETS[presetKey];
+  if (viewportWidth >= 640) return base;
+
+  // On narrow portrait phones (<640 px), pull camera back and shift target slightly down
+  // so focused components sit completely above the bottom LearnPlayer card.
+  const mult =
+    presetKey === 'overview'
+      ? 2.4
+      : presetKey === 'meters' || presetKey === 'load'
+        ? 2.15
+        : 1.7;
+  const dx = base.pos[0] - base.target[0];
+  const dy = base.pos[1] - base.target[1];
+  const dz = base.pos[2] - base.target[2];
+  return {
+    pos: [
+      base.target[0] + dx * mult,
+      base.target[1] + dy * mult,
+      base.target[2] + dz * mult,
+    ],
+    target: [base.target[0], base.target[1] - 0.45, base.target[2]],
+  };
+}
+
 function CameraController() {
   const cameraPreset = useSessionStore((s) => s.cameraPreset);
   const setCameraPreset = useSessionStore((s) => s.setCameraPreset);
   const isDraggingControl = useControlsStore((s) => s.isDraggingControl);
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const controlsRef = useRef<ComponentRef<typeof OrbitControls>>(null);
   const isFirstRender = useRef(true);
 
   useEffect(() => {
     if (!cameraPreset) return;
-    const preset = CAMERA_PRESETS[cameraPreset];
+    const preset = getResponsivePreset(cameraPreset, size.width);
     const controls = controlsRef.current;
 
     if (isFirstRender.current) {
@@ -94,7 +191,7 @@ function CameraController() {
         onUpdate: () => controls.update(),
       });
     }
-  }, [cameraPreset, camera]);
+  }, [cameraPreset, camera, size.width]);
 
   return (
     <OrbitControls
@@ -104,7 +201,7 @@ function CameraController() {
       enableDamping
       dampingFactor={0.08}
       minDistance={1.8}
-      maxDistance={15}
+      maxDistance={18}
       maxPolarAngle={Math.PI * 0.48}
       minPolarAngle={0.15}
       onStart={() => {
@@ -234,7 +331,6 @@ function ThemedEnvironment({
         shadow-camera-bottom={-5}
         shadow-bias={-0.0004}
       />
-      {/* Subtle rim/back light to separate dark apparatus from the benchtop */}
       <directionalLight
         ref={fillRef}
         position={[0, 4.5, -6]}
@@ -248,11 +344,20 @@ function ThemedEnvironment({
 interface BenchSceneProps {
   labOutput?: TransformerLoadOutput;
   connectionState?: ConnectionState;
+  focusIds?: string[];
+  controlsLocked?: boolean;
 }
 
-export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
+export function BenchScene({
+  labOutput,
+  connectionState,
+  focusIds = [],
+  controlsLocked = false,
+}: BenchSceneProps) {
   const experimentId = useSessionStore((s) => s.experimentId);
+  const mode = useSessionStore((s) => s.mode);
   const showingSolution = useSessionStore((s) => s.showingSolution);
+  const resolvedTheme = useThemeStore((s) => s.resolved);
   const wires = useWiringStore((s) => s.wires);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
 
@@ -323,6 +428,8 @@ export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
       benchMaterials.floorMat.dispose();
     };
   }, [benchMaterials]);
+
+  const focusColor = resolvedTheme === 'dark' ? '#38bdf8' : '#0284c7';
 
   return (
     <Canvas
@@ -397,7 +504,7 @@ export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
         </mesh>
       </group>
 
-      {/* Apparatus + generic risers for elevated rear instruments */}
+      {/* Apparatus + generic risers + Learn mode focus highlights */}
       {experiment.components.map((comp) => (
         <group key={comp.id}>
           {comp.position[1] > 0.01 && (
@@ -415,11 +522,19 @@ export function BenchScene({ labOutput, connectionState }: BenchSceneProps) {
             controlsDef={experiment.controls}
             labOutput={labOutput}
             connectionState={connectionState}
+            controlsLocked={controlsLocked}
           />
+          {mode === 'learn' && focusIds.includes(comp.id) && (
+            <FocusHighlight
+              position={comp.position}
+              type={comp.type}
+              color={focusColor}
+            />
+          )}
         </group>
       ))}
 
-      {/* Student wires */}
+      {/* Student / tutorial wires */}
       {wireMeta.map(({ wire, netIdx, idxInNet }) => (
         <WireMesh
           key={wire.id}

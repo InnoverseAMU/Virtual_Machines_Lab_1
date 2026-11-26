@@ -11,6 +11,7 @@ interface LampBankProps {
   supplyOn: boolean;
   loadConnected: boolean;
   v2: number;
+  controlsLocked?: boolean;
 }
 
 export function LampBank({
@@ -19,6 +20,7 @@ export function LampBank({
   supplyOn,
   loadConnected,
   v2,
+  controlsLocked = false,
 }: LampBankProps) {
   const def = getComponentDef(instance.type);
   const toggleLampIndex = useControlsStore((s) => s.toggleLampIndex);
@@ -84,10 +86,12 @@ export function LampBank({
                 position={[0, 0, 0.03]}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (controlsLocked) return;
                   toggleLampIndex(idx);
                 }}
                 onPointerOver={(e) => {
                   e.stopPropagation();
+                  if (controlsLocked) return;
                   setHoveredLamp(idx);
                   document.body.style.cursor = 'pointer';
                 }}

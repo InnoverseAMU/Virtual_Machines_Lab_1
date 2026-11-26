@@ -11,6 +11,7 @@ interface VariacProps {
   minV: number;
   maxV: number;
   stepV: number;
+  controlsLocked?: boolean;
 }
 
 export function Variac({
@@ -19,6 +20,7 @@ export function Variac({
   minV,
   maxV,
   stepV,
+  controlsLocked = false,
 }: VariacProps) {
   const def = getComponentDef(instance.type);
   const setVariacV = useControlsStore((s) => s.setVariacV);
@@ -120,6 +122,7 @@ export function Variac({
         position={[0, 0.84, -0.14]}
         onPointerDown={(e) => {
           e.stopPropagation();
+          if (controlsLocked) return;
           setFocusedControl('va.knob');
           setIsDraggingControl(true);
           dragStartRef.current = {
@@ -131,11 +134,13 @@ export function Variac({
         }}
         onWheel={(e) => {
           e.stopPropagation();
+          if (controlsLocked) return;
           setFocusedControl('va.knob');
           stepVariacV(e.deltaY < 0 ? stepV : -stepV, minV, maxV);
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
+          if (controlsLocked) return;
           setHovered(true);
           document.body.style.cursor = 'grab';
         }}

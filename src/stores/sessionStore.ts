@@ -35,6 +35,7 @@ interface StoredProgress {
   attempts: Record<string, number>;
   completedExperiments: string[];
   usedSolutionByExperiment: Record<string, boolean>;
+  learnCompleted: Record<string, boolean>;
 }
 
 function loadProgress(): StoredProgress {
@@ -45,6 +46,7 @@ function loadProgress(): StoredProgress {
         attempts: {},
         completedExperiments: [],
         usedSolutionByExperiment: {},
+        learnCompleted: {},
       };
     }
     const parsed = JSON.parse(raw) as Partial<StoredProgress>;
@@ -61,12 +63,17 @@ function loadProgress(): StoredProgress {
         typeof parsed.usedSolutionByExperiment === 'object'
           ? parsed.usedSolutionByExperiment
           : {},
+      learnCompleted:
+        parsed.learnCompleted && typeof parsed.learnCompleted === 'object'
+          ? parsed.learnCompleted
+          : {},
     };
   } catch {
     return {
       attempts: {},
       completedExperiments: [],
       usedSolutionByExperiment: {},
+      learnCompleted: {},
     };
   }
 }
@@ -80,7 +87,7 @@ function saveProgress(progress: StoredProgress): void {
 }
 
 export type AppScreen = 'picker' | 'mode' | 'lab';
-export type LabMode = 'self';
+export type LabMode = 'self' | 'learn';
 
 interface SessionState {
   screen: AppScreen;
@@ -89,11 +96,21 @@ interface SessionState {
   attempts: Record<string, number>;
   completedExperiments: string[];
   usedSolutionByExperiment: Record<string, boolean>;
+  learnCompleted: Record<string, boolean>;
+
+  // Self mode per-run state (never persisted)
   hintLevel: number;
   usedSolutionInRun: boolean;
   validationResult: ValidationResult | null;
   resultModalOpen: boolean;
   showingSolution: boolean;
+
+  // Learn mode per-run state (never persisted mid-lesson)
+  learnStepIndex: number;
+  learnNoLoadAck: boolean;
+  learnFinished: boolean;
+
+  // View & UI prefs
   cameraPreset: CameraPreset | null;
   showTerminalLabels: boolean;
   sidebarOpen: boolean;
@@ -108,6 +125,7 @@ interface SessionState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   toggleNumericReadouts: () => void;
+
   submitWiring: (wires: Wire[]) => ValidationResult;
   retry: () => void;
   openLastResult: () => void;
@@ -115,6 +133,13 @@ interface SessionState {
   nextHint: () => void;
   activateSolutionView: () => void;
   exitSolutionView: () => void;
+
+  setLearnStepIndex: (index: number) => void;
+  ackLearnReading: () => void;
+  resetLearnAck: () => void;
+  finishLearn: () => void;
+  resetLearnRun: () => void;
+
   pushToast: (event: RuntimeEvent) => void;
   dismissToast: (id: string) => void;
   clearToasts: () => void;
@@ -130,11 +155,18 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   attempts: initialProgress.attempts,
   completedExperiments: initialProgress.completedExperiments,
   usedSolutionByExperiment: initialProgress.usedSolutionByExperiment,
+  learnCompleted: initialProgress.learnCompleted,
+
   hintLevel: 0,
   usedSolutionInRun: false,
   validationResult: null,
   resultModalOpen: false,
   showingSolution: false,
+
+  learnStepIndex: 0,
+  learnNoLoadAck: false,
+  learnFinished: false,
+
   cameraPreset: 'overview',
   showTerminalLabels: false,
   sidebarOpen:
@@ -155,6 +187,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       validationResult: null,
       resultModalOpen: false,
       showingSolution: false,
+      learnStepIndex: 0,
+      learnNoLoadAck: false,
+      learnFinished: false,
       cameraPreset: 'overview',
       toasts: [],
     }),
@@ -192,6 +227,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       completedExperiments,
       usedSolutionByExperiment,
       usedSolutionInRun,
+      learnCompleted,
     } = get();
     const experiment = getExperiment(experimentId);
     const result = validateWiring(experiment, wires);
@@ -218,6 +254,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       attempts: nextAttempts,
       completedExperiments: nextCompleted,
       usedSolutionByExperiment: nextUsedSolution,
+      learnCompleted,
     });
 
     set({
@@ -262,6 +299,45 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   exitSolutionView: () => set({ showingSolution: false }),
 
+  setLearnStepIndex: (learnStepIndex) => set({ learnStepIndex }),
+
+  ackLearnReading: () => set({ learnNoLoadAck: true }),
+
+  resetLearnAck: () => set({ learnNoLoadAck: false }),
+
+  finishLearn: () => {
+    const {
+      experimentId,
+      attempts,
+      completedExperiments,
+      usedSolutionByExperiment,
+      learnCompleted,
+    } = get();
+    const nextLearnCompleted = {
+      ...learnCompleted,
+      [experimentId]: true,
+    };
+    saveProgress({
+      attempts,
+      completedExperiments,
+      usedSolutionByExperiment,
+      learnCompleted: nextLearnCompleted,
+    });
+    set({
+      learnCompleted: nextLearnCompleted,
+      learnFinished: true,
+    });
+  },
+
+  resetLearnRun: () =>
+    set({
+      learnStepIndex: 0,
+      learnNoLoadAck: false,
+      learnFinished: false,
+      cameraPreset: 'overview',
+      toasts: [],
+    }),
+
   pushToast: (event) =>
     set((state) => {
       const filtered = state.toasts.filter((t) => t.id !== event.id);
@@ -282,6 +358,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       validationResult: null,
       resultModalOpen: false,
       showingSolution: false,
+      learnStepIndex: 0,
+      learnNoLoadAck: false,
+      learnFinished: false,
       cameraPreset: 'overview',
       toasts: [],
     }),

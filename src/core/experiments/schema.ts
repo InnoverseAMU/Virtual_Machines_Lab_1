@@ -81,12 +81,34 @@ const ControlDefSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+const LearnStepConditionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('v1-target'),
+    targetV: z.number(),
+    toleranceV: z.number().positive(),
+  }),
+  z.object({
+    kind: z.literal('no-load-ack'),
+    targetV: z.number(),
+    toleranceV: z.number().positive(),
+    lamps: z.number().int().min(0),
+  }),
+  z.object({
+    kind: z.literal('loaded-v1-target'),
+    minLamps: z.number().int().min(1),
+    targetV: z.number(),
+    toleranceV: z.number().positive(),
+  }),
+]);
+
 const LearnStepSchema = z.object({
+  id: z.string().min(1),
   focus: z.array(z.string()),
   camera: z.enum(['overview', 'supply', 'transformer', 'meters', 'load']),
   title: z.string().min(1),
   why: z.string().min(1),
   connectTerminals: z.array(TerminalPairSchema).optional(),
+  completionCondition: LearnStepConditionSchema.optional(),
 });
 
 const ColumnDefSchema = z.object({

@@ -5,6 +5,7 @@ export interface Wire {
   id: string;
   a: TerminalId;
   b: TerminalId;
+  tutorialStep?: number;
 }
 
 export type WireEndpointPair = [TerminalId, TerminalId];
@@ -106,12 +107,33 @@ export type CameraPreset =
   | 'meters'
   | 'load';
 
+export type LearnStepCondition =
+  | {
+      kind: 'v1-target';
+      targetV: number;
+      toleranceV: number;
+    }
+  | {
+      kind: 'no-load-ack';
+      targetV: number;
+      toleranceV: number;
+      lamps: number;
+    }
+  | {
+      kind: 'loaded-v1-target';
+      minLamps: number;
+      targetV: number;
+      toleranceV: number;
+    };
+
 export interface LearnStep {
+  id: string;
   focus: string[];
   camera: CameraPreset;
   title: string;
   why: string;
   connectTerminals?: [TerminalId, TerminalId][];
+  completionCondition?: LearnStepCondition;
 }
 
 export interface ColumnDef {

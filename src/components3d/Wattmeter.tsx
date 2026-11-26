@@ -13,6 +13,7 @@ interface WattmeterProps {
   iRange: number;
   vOptions: number[];
   iOptions: number[];
+  controlsLocked?: boolean;
 }
 
 export function Wattmeter({
@@ -22,6 +23,7 @@ export function Wattmeter({
   iRange,
   vOptions,
   iOptions,
+  controlsLocked = false,
 }: WattmeterProps) {
   const def = getComponentDef(instance.type);
   const showNumericReadouts = useSessionStore((s) => s.showNumericReadouts);
@@ -76,10 +78,12 @@ export function Wattmeter({
           position={[0, 0.03, 0]}
           onClick={(e) => {
             e.stopPropagation();
+            if (controlsLocked) return;
             cycleWmVRange(vOptions);
           }}
           onPointerOver={(e) => {
             e.stopPropagation();
+            if (controlsLocked) return;
             setHoveredSel('v');
             document.body.style.cursor = 'pointer';
           }}
@@ -109,10 +113,12 @@ export function Wattmeter({
           position={[0, 0.03, 0]}
           onClick={(e) => {
             e.stopPropagation();
+            if (controlsLocked) return;
             cycleWmIRange(iOptions);
           }}
           onPointerOver={(e) => {
             e.stopPropagation();
+            if (controlsLocked) return;
             setHoveredSel('i');
             document.body.style.cursor = 'pointer';
           }}

@@ -27,9 +27,11 @@ export function Terminal({
   const clickTerminal = useWiringStore((s) => s.clickTerminal);
   const setHoveredTerminal = useWiringStore((s) => s.setHoveredTerminal);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
+  const mode = useSessionStore((s) => s.mode);
   const supplyOn = useControlsStore((s) => s.supplyOn);
 
-  const isSelected = selectedTerminal === fullId;
+  const isLearnMode = mode === 'learn';
+  const isSelected = !isLearnMode && selectedTerminal === fullId;
   const ringColor = UNIFORM_TERMINAL_COLOR;
 
   return (
@@ -39,13 +41,14 @@ export function Terminal({
         position={[0, 0, 0.03]}
         onClick={(e) => {
           e.stopPropagation();
+          if (isLearnMode) return;
           clickTerminal(fullId, supplyOn);
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
           setHoveredTerminal(fullId);
-          document.body.style.cursor = 'pointer';
+          document.body.style.cursor = isLearnMode ? 'default' : 'pointer';
         }}
         onPointerOut={(e) => {
           e.stopPropagation();

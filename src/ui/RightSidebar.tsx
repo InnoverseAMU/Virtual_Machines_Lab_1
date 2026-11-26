@@ -6,6 +6,7 @@ import { useSessionStore } from '../stores/sessionStore';
 interface RightSidebarProps {
   controls: ControlDef[];
   output: TransformerLoadOutput;
+  controlsLocked?: boolean;
 }
 
 function StatusBadge({
@@ -52,8 +53,10 @@ function StatusBadge({
 
 const ControlsSection = memo(function ControlsSection({
   controls,
+  controlsLocked = false,
 }: {
   controls: ControlDef[];
+  controlsLocked?: boolean;
 }) {
   const supplyOn = useControlsStore((s) => s.supplyOn);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
@@ -73,12 +76,27 @@ const ControlsSection = memo(function ControlsSection({
 
   return (
     <section aria-label="Bench controls" className="space-y-3">
-      <h2
-        className="text-[11px] font-bold tracking-wider uppercase"
-        style={{ color: 'var(--vml-text-muted)' }}
+      <div className="flex items-center justify-between gap-2">
+        <h2
+          className="text-[11px] font-bold tracking-wider uppercase"
+          style={{ color: 'var(--vml-text-muted)' }}
+        >
+          Controls
+        </h2>
+        {controlsLocked && (
+          <span
+            className="text-[10px] font-medium"
+            style={{ color: 'var(--vml-text-muted)' }}
+          >
+            Unlocks at step 12
+          </span>
+        )}
+      </div>
+
+      <fieldset
+        disabled={controlsLocked}
+        className={`space-y-3 ${controlsLocked ? 'opacity-60' : ''}`}
       >
-        Controls
-      </h2>
 
       {controls.map((ctrl) => {
         if (ctrl.kind === 'switch') {
@@ -264,6 +282,7 @@ const ControlsSection = memo(function ControlsSection({
 
         return null;
       })}
+      </fieldset>
     </section>
   );
 });
@@ -503,7 +522,11 @@ const ReadingsSection = memo(function ReadingsSection({
   );
 });
 
-export function RightSidebar({ controls, output }: RightSidebarProps) {
+export function RightSidebar({
+  controls,
+  output,
+  controlsLocked = false,
+}: RightSidebarProps) {
   const [mobileExpanded, setMobileExpanded] = useState(false);
 
   const sidebarOpen = useSessionStore((s) => s.sidebarOpen);
@@ -530,7 +553,7 @@ export function RightSidebar({ controls, output }: RightSidebarProps) {
 
   const stackedContent = (
     <div className="space-y-4">
-      <ControlsSection controls={controls} />
+      <ControlsSection controls={controls} controlsLocked={controlsLocked} />
       <div style={{ borderTop: '1px solid var(--vml-border)' }} className="pt-3.5">
         <ReadingsSection
           vpText={vpText}

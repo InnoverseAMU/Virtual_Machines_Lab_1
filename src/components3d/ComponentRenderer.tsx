@@ -17,6 +17,7 @@ interface ComponentRendererProps {
   controlsDef: ControlDef[];
   labOutput?: TransformerLoadOutput;
   connectionState?: ConnectionState;
+  controlsLocked?: boolean;
 }
 
 export function ComponentRenderer({
@@ -24,6 +25,7 @@ export function ComponentRenderer({
   controlsDef,
   labOutput,
   connectionState,
+  controlsLocked = false,
 }: ComponentRendererProps) {
   const supplyOn = useControlsStore((s) => s.supplyOn);
   const mcbTripped = useControlsStore((s) => s.mcbTripped);
@@ -39,6 +41,7 @@ export function ComponentRenderer({
           instance={instance}
           supplyOn={supplyOn}
           mcbTripped={mcbTripped}
+          controlsLocked={controlsLocked}
         />
       );
     case 'variac1ph': {
@@ -55,6 +58,7 @@ export function ComponentRenderer({
           minV={minV}
           maxV={maxV}
           stepV={stepV}
+          controlsLocked={controlsLocked}
         />
       );
     }
@@ -75,6 +79,7 @@ export function ComponentRenderer({
           iRange={wmIRange}
           vOptions={vOptions}
           iOptions={iOptions}
+          controlsLocked={controlsLocked}
         />
       );
     }
@@ -101,6 +106,7 @@ export function ComponentRenderer({
           supplyOn={supplyOn}
           loadConnected={connectionState?.loadConnected ?? false}
           v2={labOutput?.V2 ?? 0}
+          controlsLocked={controlsLocked}
         />
       );
   }

@@ -383,24 +383,28 @@ export const ex3_1: ExperimentDef = {
   ],
   learnSteps: [
     {
+      id: 'step-1',
       camera: 'overview',
       focus: ['sup', 'va', 'wm', 'vp', 'tx', 'vs', 'am', 'ld'],
       title: 'Experiment Overview',
       why: 'In a load test the transformer is loaded for real, so voltage regulation and efficiency are measured directly instead of calculated from an equivalent circuit. You will record secondary voltage, secondary current and input power from no load up to full load.',
     },
     {
+      id: 'step-2',
       camera: 'overview',
       focus: ['sup'],
       title: 'Safety & Ratings',
       why: 'Switch the supply off before touching any wire, and check instrument ratings: each meter should be rated at least 20 percent above the highest value it will see. Today that means a 300 V primary voltmeter, a 150 V secondary voltmeter and a 25 A ammeter.',
     },
     {
+      id: 'step-3',
       camera: 'supply',
       focus: ['sup', 'va'],
       title: 'Autotransformer Purpose',
       why: 'The transformer must be tested at its rated primary voltage, 230 V, and that voltage must be held while the load changes. A variable autotransformer lets you set and re-adjust it. Its kVA rating must be at least that of the transformer under test.',
     },
     {
+      id: 'step-4',
       camera: 'supply',
       focus: ['sup', 'va'],
       title: 'Wire Supply to Autotransformer',
@@ -411,12 +415,14 @@ export const ex3_1: ExperimentDef = {
       ],
     },
     {
+      id: 'step-5',
       camera: 'meters',
       focus: ['wm'],
       title: 'Wattmeter Coils',
       why: 'The wattmeter has two coils. The current coil (M, L) goes in series because it must carry the primary current. The pressure coil (V1, V2) goes across the supply because it senses voltage. M faces the mains.',
     },
     {
+      id: 'step-6',
       camera: 'meters',
       focus: ['wm', 'va'],
       title: 'Connect Wattmeter Input & Pressure Coil',
@@ -428,12 +434,14 @@ export const ex3_1: ExperimentDef = {
       ],
     },
     {
+      id: 'step-7',
       camera: 'transformer',
       focus: ['tx'],
       title: 'Transformer Under Test',
       why: 'Transformer under test: 2 kVA, 230/115 V. Rated currents are about 8.7 A on the 230 V side and 17.4 A on the 115 V side. We energise the 230 V winding at rated voltage and load the 115 V winding.',
     },
     {
+      id: 'step-8',
       camera: 'transformer',
       focus: ['wm', 'tx'],
       title: 'Connect Primary Winding',
@@ -444,6 +452,7 @@ export const ex3_1: ExperimentDef = {
       ],
     },
     {
+      id: 'step-9',
       camera: 'meters',
       focus: ['vp'],
       title: 'Primary Voltmeter',
@@ -454,6 +463,7 @@ export const ex3_1: ExperimentDef = {
       ],
     },
     {
+      id: 'step-10',
       camera: 'load',
       focus: ['am', 'vs'],
       title: 'Secondary Meters',
@@ -465,6 +475,7 @@ export const ex3_1: ExperimentDef = {
       ],
     },
     {
+      id: 'step-11',
       camera: 'load',
       focus: ['ld'],
       title: 'Lamp Bank Load',
@@ -475,36 +486,59 @@ export const ex3_1: ExperimentDef = {
       ],
     },
     {
+      id: 'step-12',
       camera: 'supply',
       focus: ['sup', 'va'],
       title: 'Energise From Zero',
       why: 'Start from zero: knob at 0 V and all lamps off, then switch the supply on. Raise the knob until the primary voltmeter reads 230 V.',
+      completionCondition: {
+        kind: 'v1-target',
+        targetV: 230,
+        toleranceV: 3,
+      },
     },
     {
+      id: 'step-13',
       camera: 'meters',
       focus: ['wm', 'vs'],
       title: 'No-Load Reading',
       why: 'No load: read V2 and the wattmeter. The transformer draws only magnetising current, so the input power is almost entirely iron loss. This power is small, so switch the wattmeter to its lowest current range or the pointer barely moves.',
+      completionCondition: {
+        kind: 'no-load-ack',
+        targetV: 230,
+        toleranceV: 3,
+        lamps: 0,
+      },
     },
     {
+      id: 'step-14',
       camera: 'load',
       focus: ['ld', 'vp'],
       title: 'Load Steps & Holding V1',
       why: 'Add load in steps. Each time the primary voltage dips because of the drop in the supply and autotransformer, so re-adjust the knob to hold 230 V before reading V2, I2 and the wattmeter.',
+      completionCondition: {
+        kind: 'loaded-v1-target',
+        minLamps: 5,
+        targetV: 230,
+        toleranceV: 3,
+      },
     },
     {
+      id: 'step-15',
       camera: 'meters',
       focus: ['wm'],
       title: 'Wattmeter Multiplying Factor',
       why: 'The wattmeter dial is not in watts. True power = dial reading x multiplying factor, where MF = (voltage range x current range) / full-scale divisions. For 300 V, 10 A and 150 divisions, MF = 20 W per division.',
     },
     {
+      id: 'step-16',
       camera: 'overview',
       focus: ['vs'],
       title: 'Voltage Regulation',
       why: 'Voltage regulation = (V2 no-load - V2 full-load) / V2 rated x 100. Use V2 at no load and V2 at rated secondary current, about 17.4 A.',
     },
     {
+      id: 'step-17',
       camera: 'overview',
       focus: [],
       title: 'Efficiency Curve',
