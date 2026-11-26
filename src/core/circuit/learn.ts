@@ -179,8 +179,9 @@ export function findVariacForTargetV1(
       gains,
       { stageIndex, seed: options.seed },
     );
-    if (res.output.mcbTripped) return Infinity;
-    return findMeterReading(res.output, meterId)?.shownValue ?? 0;
+    const reading = findMeterReading(res.output, meterId);
+    if (res.output.mcbTripped || reading?.damaged) return Infinity;
+    return reading?.shownValue ?? 0;
   };
 
   const totalSteps = Math.max(1, Math.round((maxV - minV) / step));

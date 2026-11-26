@@ -345,4 +345,53 @@ describe('Learn mode observations & practice check across experiments', () => {
     expect(session.runPractised['ex3.2']).not.toBe(true);
     expect(session.completedExperiments).not.toContain('ex3.2');
   });
+
+  it('Exp 3.2 step 7 (oc-step-7) sets variac near 115 V (within 115 +/- 2 V) and treats damaged probes as overrange', () => {
+    const steps = getAllLearnSteps(ex3_2);
+    const step7 = steps[6];
+    expect(step7.id).toBe('oc-step-7');
+    const cond = step7.completionCondition!;
+
+    const ocWires = steps
+      .slice(0, 7)
+      .filter((s) => s.stageId === step7.stageId)
+      .flatMap((s) => s.connectTerminals ?? []);
+
+    const targetKnob = findVariacForTargetV1(
+      ex3_2,
+      ocWires,
+      cond.targetV,
+      0,
+      ZERO_GAINS,
+      {
+        stageIndex: 0,
+        knobControlId: 'controlId' in cond ? cond.controlId : 'va.knob',
+        meterId: cond.meterId,
+      },
+    );
+    expect(targetKnob).toBeGreaterThanOrEqual(113);
+    expect(targetKnob).toBeLessThanOrEqual(117);
+
+    const out = evaluateExperimentPhysics(
+      ex3_2,
+      ocWires,
+      {
+        'sup.switch': true,
+        'va.knob': targetKnob,
+        'wm.vRange': 150,
+        'wm.iRange': 1,
+      },
+      ZERO_GAINS,
+      { stageIndex: 0 },
+    ).output;
+    const status = evaluateLearnStepCondition(
+      step7,
+      { 'sup.switch': true, 'va.knob': targetKnob },
+      out,
+      false,
+    );
+    expect(status.met).toBe(true);
+    const vmVal = findMeterReading(out, 'vm')?.shownValue ?? 0;
+    expect(Math.abs(vmVal - 115)).toBeLessThanOrEqual(2);
+  });
 });

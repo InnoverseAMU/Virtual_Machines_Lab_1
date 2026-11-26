@@ -210,6 +210,19 @@ export function App() {
     return idx >= 0 ? idx : learnSteps.length;
   }, [learnSteps]);
 
+  const flushLearnStepWires = useCallback(
+    (upToIndex: number, stageId: string | undefined) => {
+      for (let i = 0; i <= upToIndex && i < learnSteps.length; i++) {
+        const st = learnSteps[i];
+        if (stageId && st.stageId !== stageId) continue;
+        for (const [a, b] of st.connectTerminals ?? []) {
+          addTutorialWire(a, b, i);
+        }
+      }
+    },
+    [learnSteps, addTutorialWire],
+  );
+
   const handleLearnBack = useCallback(() => {
     if (learnStepIndex <= 0) return;
     clearWireTimers();
@@ -231,14 +244,7 @@ export function App() {
       if (crossingStage) {
         const prevStageIdx = getStageIndexById(experiment, prevStep.stageId);
         setCurrentStageIndex(prevStageIdx);
-        for (let i = 0; i <= prevIdx; i++) {
-          const st = learnSteps[i];
-          if (st.stageId === prevStep.stageId) {
-            for (const [a, b] of st.connectTerminals ?? []) {
-              addTutorialWire(a, b, i);
-            }
-          }
-        }
+        flushLearnStepWires(prevIdx, prevStep.stageId);
       }
     } else if (currentLearnStep?.completionCondition?.kind === 'no-load-ack') {
       resetLearnAck();
@@ -257,7 +263,7 @@ export function App() {
     resetLearnAck,
     removeTutorialWiresFromStep,
     setCurrentStageIndex,
-    addTutorialWire,
+    flushLearnStepWires,
     setLearnStepIndex,
   ]);
 
@@ -265,6 +271,8 @@ export function App() {
     const cond = currentLearnStep?.completionCondition;
     if (!cond) return;
 
+    clearWireTimers();
+    flushLearnStepWires(learnStepIndex, currentLearnStep?.stageId);
     const currentWires = useWiringStore.getState().wires;
     const loadId = 'loadControlId' in cond ? (cond.loadControlId ?? 'ld.lamps') : 'ld.lamps';
     const meterId = cond.meterId ?? 'vp';
@@ -293,17 +301,21 @@ export function App() {
     if (hasLoadCtrl) {
       setControlValue(loadId, targetLamps);
     }
-    setControlValue(controlId, targetKnob);
     setControlValue('sup.switch', true);
+    setControlValue(controlId, targetKnob);
     if (cond.kind === 'no-load-ack') {
       ackLearnReading();
     }
   }, [
     currentLearnStep,
+    learnStepIndex,
     experiment,
+    currentStage,
     currentStageIndex,
     sessionSeed,
     gains,
+    clearWireTimers,
+    flushLearnStepWires,
     setControlValue,
     ackLearnReading,
   ]);
@@ -311,11 +323,20 @@ export function App() {
   const handleLearnNext = useCallback(() => {
     if (learnStepIndex >= learnSteps.length - 1) return;
     if (learnConditionStatus.hasCondition && !learnConditionStatus.met) return;
+    clearWireTimers();
+    if ((currentLearnStep?.connectTerminals?.length ?? 0) > 0) {
+      setControlValue('sup.switch', false);
+    }
+    flushLearnStepWires(learnStepIndex, currentLearnStep?.stageId);
     setLearnStepIndex(learnStepIndex + 1);
   }, [
     learnStepIndex,
     learnSteps.length,
     learnConditionStatus,
+    currentLearnStep,
+    clearWireTimers,
+    setControlValue,
+    flushLearnStepWires,
     setLearnStepIndex,
   ]);
 
@@ -323,13 +344,10 @@ export function App() {
     if (learnStepIndex >= learnSteps.length - 1) return;
     clearWireTimers();
 
-    const pairs = currentLearnStep?.connectTerminals ?? [];
-    if (pairs.length > 0) {
+    if ((currentLearnStep?.connectTerminals?.length ?? 0) > 0) {
       setControlValue('sup.switch', false);
-      for (const [a, b] of pairs) {
-        addTutorialWire(a, b, learnStepIndex);
-      }
     }
+    flushLearnStepWires(learnStepIndex, currentLearnStep?.stageId);
 
     if (currentLearnStep?.completionCondition) {
       applyLearnStepControls();
@@ -342,7 +360,7 @@ export function App() {
     currentLearnStep,
     clearWireTimers,
     setControlValue,
-    addTutorialWire,
+    flushLearnStepWires,
     applyLearnStepControls,
     setLearnStepIndex,
   ]);
