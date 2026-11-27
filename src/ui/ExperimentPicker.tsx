@@ -3,7 +3,7 @@ import { ASSET_MANIFEST, getExperimentAssets } from '../core/experiments/assets'
 import { EXPERIMENT_SUMMARIES } from '../core/experiments/registry';
 import type { ExperimentSummary } from '../core/types';
 import { useSessionStore } from '../stores/sessionStore';
-import { AUTHOR_GITHUB_URL, AUTHOR_NAME, INNOVERSE_URL, LabFooter } from './LabFooter';
+import { AUTHOR_NAME, LabFooter } from './LabFooter';
 import { CommonPdfLink, ExperimentPdfActions } from './PdfActions';
 import { ThemeToggleButton } from './ThemeToggleButton';
 
@@ -453,7 +453,7 @@ export function ExperimentPicker() {
           {/* Action Utility Buttons */}
           <div className="flex items-center gap-2 sm:gap-2.5">
             <a
-              href={AUTHOR_GITHUB_URL}
+              href="https://github.com/InnoverseAMU/Virtual_Machines_Lab_1"
               target="_blank"
               rel="noopener noreferrer"
               title={`Built by ${AUTHOR_NAME} — View on GitHub`}
@@ -510,7 +510,7 @@ export function ExperimentPicker() {
           &amp; Interactive 3D Circuit Workbench
         </p>
 
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+        {/* <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1 dark:border-slate-800 dark:bg-slate-900/70">
             <span>Built by</span>
             <a
@@ -531,7 +531,7 @@ export function ExperimentPicker() {
               Innoverse
             </a>
           </span>
-        </div>
+        </div> */}
       </section>
 
       {/* MainContent */}
