@@ -5,10 +5,15 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { ComponentRef } from 'react';
 import * as THREE from 'three';
 import { ComponentRenderer } from '../components3d/ComponentRenderer';
+import { NetHighlightContext } from '../components3d/NetHighlightContext';
 import { WireMesh } from '../components3d/Wire';
 import { computeWireCurrentFlows } from '../core/circuit/flow';
 import { COMPONENT_FOOTPRINTS } from '../core/circuit/layout';
-import { buildNets, collectInternalLinks } from '../core/circuit/nets';
+import {
+  buildNets,
+  collectInternalLinks,
+  getConnectedNetTerminals,
+} from '../core/circuit/nets';
 import {
   getStage,
   getStageCameraPresets,
@@ -352,6 +357,8 @@ export function BenchScene({
   const clearHighlightedNet = useSessionStore((s) => s.clearHighlightedNet);
   const resolvedTheme = useThemeStore((s) => s.resolved);
   const wires = useWiringStore((s) => s.wires);
+  const hoveredTerminal = useWiringStore((s) => s.hoveredTerminal);
+  const setHoveredTerminal = useWiringStore((s) => s.setHoveredTerminal);
   const clearSelectedTerminal = useWiringStore((s) => s.clearSelectedTerminal);
   const controlValues = useControlsStore((s) => s.values);
 
@@ -369,16 +376,19 @@ export function BenchScene({
     [stage],
   );
 
-  const highlightedNetTerminals = useMemo(() => {
-    if (mode !== 'observe' || highlightedNetIndex === null) return null;
-    const net = stage.acceptedNetlists[0]?.[highlightedNetIndex];
-    return net ? new Set(net) : null;
-  }, [mode, highlightedNetIndex, stage]);
-
   const netGraph = useMemo(
     () => buildNets(stageComponents, wires, controlValues),
     [stageComponents, wires, controlValues],
   );
+
+  const highlightedNetTerminals = useMemo(() => {
+    if (mode === 'observe') {
+      if (highlightedNetIndex === null) return null;
+      const net = stage.acceptedNetlists[0]?.[highlightedNetIndex];
+      return net ? new Set(net) : null;
+    }
+    return getConnectedNetTerminals(netGraph, hoveredTerminal);
+  }, [mode, highlightedNetIndex, stage, netGraph, hoveredTerminal]);
 
   const wireMeta = useMemo(() => {
     const countPerNet = new Map<number, number>();
@@ -556,6 +566,7 @@ export function BenchScene({
       }}
       onPointerMissed={() => {
         clearSelectedTerminal();
+        setHoveredTerminal(null);
         clearHighlightedNet();
       }}
       className="h-full w-full"
@@ -633,34 +644,36 @@ export function BenchScene({
       </group>
 
       {/* Stage apparatus + risers + Learn mode focus highlights */}
-      {stageComponents.map((comp) => (
-        <group key={comp.id}>
-          {comp.position[1] > 0.01 && (
-            <mesh
-              position={[comp.position[0], comp.position[1] / 2, comp.position[2]]}
-              castShadow
-              receiveShadow
-              material={benchMaterials.benchLegMat}
-            >
-              <boxGeometry args={[0.96, comp.position[1], 0.92]} />
-            </mesh>
-          )}
-          <ComponentRenderer
-            instance={comp}
-            controlsDef={stage.controls}
-            labOutput={labOutput}
-            connectionState={connectionState}
-            controlsLocked={controlsLocked}
-          />
-          {mode === 'learn' && focusIds.includes(comp.id) && (
-            <FocusHighlight
-              position={comp.position}
-              type={comp.type}
-              color={focusColor}
+      <NetHighlightContext.Provider value={highlightedNetTerminals}>
+        {stageComponents.map((comp) => (
+          <group key={comp.id}>
+            {comp.position[1] > 0.01 && (
+              <mesh
+                position={[comp.position[0], comp.position[1] / 2, comp.position[2]]}
+                castShadow
+                receiveShadow
+                material={benchMaterials.benchLegMat}
+              >
+                <boxGeometry args={[0.96, comp.position[1], 0.92]} />
+              </mesh>
+            )}
+            <ComponentRenderer
+              instance={comp}
+              controlsDef={stage.controls}
+              labOutput={labOutput}
+              connectionState={connectionState}
+              controlsLocked={controlsLocked}
             />
-          )}
-        </group>
-      ))}
+            {mode === 'learn' && focusIds.includes(comp.id) && (
+              <FocusHighlight
+                position={comp.position}
+                type={comp.type}
+                color={focusColor}
+              />
+            )}
+          </group>
+        ))}
+      </NetHighlightContext.Provider>
 
       {/* Student / tutorial wires */}
       {wireMeta.map(({ wire, netIdx, idxInNet }) => {

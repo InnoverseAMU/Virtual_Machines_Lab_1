@@ -1,0 +1,18 @@
+Virtual Machines Lab — Explainer Film Credits
+
+Project & Application
+- Virtual Machines Lab (EEC2910 / EEC2912 — Electrical Machines Lab 1)
+  Zakir Husain College of Engineering and Technology (ZHCET), Aligarh Muslim University (AMU)
+  Author: Asad Mokarim
+  Assets captured directly from the running Virtual Machines Lab application and public/experiments/ex3-1/diagrams/fig-3-1-1.png.
+
+Typefaces (SIL Open Font License 1.1 — OFL)
+- Inter (https://github.com/google/fonts/tree/main/ofl/inter)
+- Inter Tight (https://github.com/google/fonts/tree/main/ofl/intertight)
+- JetBrains Mono (https://github.com/google/fonts/tree/main/ofl/jetbrainsmono)
+
+Voiceover Engine
+- Kokoro ONNX (https://github.com/thewh1teagle/kokoro-onnx) — Apache-2.0 / MIT
+
+Music & Sound Effects
+- Original score and procedural foley synthesized in Python (numpy / scipy) using Lemo-Opuscar core/audio/sfx.py.

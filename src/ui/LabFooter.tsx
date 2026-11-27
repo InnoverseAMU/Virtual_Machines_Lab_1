@@ -1,5 +1,5 @@
 export const AUTHOR_NAME = 'Asad Mokarim';
-export const AUTHOR_GITHUB_URL = 'https://github.com/asad-mokarim';
+export const AUTHOR_GITHUB_URL = 'https://github.com/AsadMokarim';
 export const INNOVERSE_URL = 'https://innoverseamu.in';
 
 interface LabFooterProps {

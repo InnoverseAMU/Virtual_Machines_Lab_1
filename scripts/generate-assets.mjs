@@ -141,11 +141,11 @@ export function buildAssetManifest({
     return manifest;
   }
 
-  // Common PDF: public/experiments/common/general-instructions.pdf
+  // Common PDF: public/experiments/common/lab-manual.pdf
   const commonPdfPath = path.join(
     experimentsDir,
     'common',
-    'general-instructions.pdf',
+    'lab-manual.pdf',
   );
   if (fs.existsSync(commonPdfPath)) {
     try {
@@ -153,16 +153,16 @@ export function buildAssetManifest({
       if (stat.isFile()) {
         if (stat.size > PDF_WARN_BYTES) {
           warn(
-            `common/general-instructions.pdf is ${(stat.size / (1024 * 1024)).toFixed(2)} MB (> 5 MB).`,
+            `common/lab-manual.pdf is ${(stat.size / (1024 * 1024)).toFixed(2)} MB (> 5 MB).`,
           );
         }
         manifest.commonPdf = {
           src: encodeRelativePublicPath(
             'experiments',
             'common',
-            'general-instructions.pdf',
+            'lab-manual.pdf',
           ),
-          title: 'General instructions (PDF)',
+          title: 'Lab Manual (PDF)',
         };
       }
     } catch {

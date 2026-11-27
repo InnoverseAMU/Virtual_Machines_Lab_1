@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { findVariacForTargetV1 } from '../core/circuit/learn';
+import { getObserveSteps } from '../core/circuit/observe';
 import { collectInternalLinks, wiresFromNetlist } from '../core/circuit/nets';
 import { findStageTerminalNetInfo, getStage } from '../core/circuit/stages';
 import { validateWiring } from '../core/circuit/validate';
 import { ex3_1, NET_A, NET_B } from '../core/experiments/ex3_1';
+import { EXPERIMENTS } from '../core/experiments/registry';
 import { evaluateExperimentPhysics } from '../core/physics/evaluate';
 import { extractTransformerParams } from '../core/physics/models/transformerLoad';
 import { computeRunTruth } from '../core/physics/report';
@@ -162,5 +164,82 @@ describe('Observe mode (pre-wired bench)', () => {
     });
     expect(findStageTerminalNetInfo(stage31, 'sup.N')?.label).toMatch(/neutral/i);
     expect(findStageTerminalNetInfo(stage31, 'vp.A')).toBeTruthy();
+  });
+
+  it('provides ObserveSteps with which, why, when, and steps for every stage of every experiment', () => {
+    for (const exp of Object.values(EXPERIMENTS)) {
+      for (const stage of exp.stages) {
+        const steps = getObserveSteps(exp.id, stage);
+        expect(steps.length).toBeGreaterThan(0);
+        for (const step of steps) {
+          expect(step.which.trim().length).toBeGreaterThan(0);
+          expect(step.why.trim().length).toBeGreaterThan(0);
+          expect(step.when.trim().length).toBeGreaterThan(0);
+          expect(step.steps.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it('evaluates ObserveStep readiness and recorded status in ex3.1 and resets observeStepIndex on stage switch', () => {
+    enterLabMode('ex3.1', 'observe');
+    const stage = getStage(ex3_1, 0);
+    const steps = getObserveSteps('ex3.1', stage);
+    const noLoadStep = steps[0];
+    const wires = useWiringStore.getState().wires;
+
+    // 1. Supply OFF -> not ready
+    let controls = { ...useControlsStore.getState().values };
+    let evalRes = evaluateExperimentPhysics(ex3_1, wires, controls, ZERO_GAINS);
+    let status = noLoadStep.evaluateReady({
+      controls,
+      output: evalRes.output,
+      energised: evalRes.connectionState.energised,
+      dualReady: true,
+      rows: [],
+      params: stage.physicsParams,
+    });
+    expect(status.ready).toBe(false);
+    expect(status.recorded).toBe(false);
+
+    // 2. Supply ON, 0 lamps, V1 = 230 V -> ready
+    const knob = findVariacForTargetV1(ex3_1, wires, 230, 0, ZERO_GAINS);
+    useControlsStore.getState().setSupplyOn(true);
+    useControlsStore.getState().setVariacV(knob);
+    useControlsStore.getState().setLamps(0);
+    controls = { ...useControlsStore.getState().values };
+    evalRes = evaluateExperimentPhysics(ex3_1, wires, controls, ZERO_GAINS);
+    status = noLoadStep.evaluateReady({
+      controls,
+      output: evalRes.output,
+      energised: evalRes.connectionState.energised,
+      dualReady: true,
+      rows: [],
+      params: stage.physicsParams,
+    });
+    expect(status.ready).toBe(true);
+    expect(status.recorded).toBe(false);
+
+    // 3. Record row -> recorded becomes true
+    useSessionStore
+      .getState()
+      .addObservationRow(evalRes.output, controls, evalRes.connectionState.energised);
+    const rows = useSessionStore.getState().observationRows;
+    status = noLoadStep.evaluateReady({
+      controls,
+      output: evalRes.output,
+      energised: evalRes.connectionState.energised,
+      dualReady: true,
+      rows,
+      params: stage.physicsParams,
+    });
+    expect(status.recorded).toBe(true);
+
+    // 4. Multi-stage switch resets observeStepIndex to 0
+    enterLabMode('ex3.2', 'observe');
+    useSessionStore.getState().setObserveStepIndex(2);
+    expect(useSessionStore.getState().observeStepIndex).toBe(2);
+    useSessionStore.getState().switchObserveStage(1);
+    expect(useSessionStore.getState().observeStepIndex).toBe(0);
   });
 });

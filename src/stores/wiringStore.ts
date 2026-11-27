@@ -139,7 +139,7 @@ export const useWiringStore = create<WiringState>((set, get) => ({
       return;
     }
     useControlsStore.getState().clearMcbTrip();
-    set({ wires: [], selectedTerminal: null });
+    set({ wires: [], selectedTerminal: null, hoveredTerminal: null });
   },
 
   setSolutionWires: (pairs) => {
@@ -211,6 +211,6 @@ export const useWiringStore = create<WiringState>((set, get) => ({
 
   clearAllWiresScripted: () => {
     useControlsStore.getState().clearMcbTrip();
-    set({ wires: [], selectedTerminal: null });
+    set({ wires: [], selectedTerminal: null, hoveredTerminal: null });
   },
 }));

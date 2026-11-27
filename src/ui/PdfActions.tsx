@@ -184,7 +184,7 @@ export function CommonPdfLink({ pdf, tone = 'default' }: CommonPdfLinkProps) {
               strokeWidth="2"
             />
           </svg>
-          <span>General Instructions (PDF)</span>
+          <span>Lab Manual (PDF)</span>
         </a>
         <button
           type="button"
@@ -212,7 +212,7 @@ export function CommonPdfLink({ pdf, tone = 'default' }: CommonPdfLinkProps) {
           color: 'var(--vml-text)',
         }}
       >
-        General instructions (PDF)
+        Lab Manual (PDF)
       </a>
       <button
         type="button"

@@ -23,9 +23,22 @@ interface WireMeshProps {
 }
 
 const MAX_PARTICLE_COUNT = 26;
-const SHARED_PARTICLE_GEO = new THREE.SphereGeometry(0.0115, 8, 8);
+const SHARED_PARTICLE_GEO = new THREE.SphereGeometry(0.0085, 8, 8);
 const SHARED_PARTICLE_MAT = new THREE.MeshBasicMaterial({
-  color: '#f0f9ff',
+  color: '#e0f2fe',
+  transparent: true,
+  opacity: 0.48,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  toneMapped: false,
+});
+const SHARED_PARTICLE_GLOW_GEO = new THREE.SphereGeometry(0.0155, 8, 8);
+const SHARED_PARTICLE_GLOW_MAT = new THREE.MeshBasicMaterial({
+  color: '#38bdf8',
+  transparent: true,
+  opacity: 0.2,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
   toneMapped: false,
 });
 const _scratchObj = new THREE.Object3D();
@@ -40,6 +53,7 @@ function WireFlowParticles({
   currentA: number;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const glowRef = useRef<THREE.InstancedMesh>(null);
   const phaseRef = useRef(0);
 
   const { curveLength, count } = useMemo(() => {
@@ -50,6 +64,7 @@ function WireFlowParticles({
 
   useFrame((_, delta) => {
     const inst = meshRef.current;
+    const glow = glowRef.current;
     if (!inst) return;
     const dt = Math.min(delta, 0.05);
     // Uniform world-space drift speed (m/s) along all wires, gently modulated by current
@@ -68,19 +83,31 @@ function WireFlowParticles({
       _scratchObj.scale.setScalar(envelope);
       _scratchObj.updateMatrix();
       inst.setMatrixAt(i, _scratchObj.matrix);
+      glow?.setMatrixAt(i, _scratchObj.matrix);
     }
     inst.instanceMatrix.needsUpdate = true;
+    if (glow) glow.instanceMatrix.needsUpdate = true;
   });
 
   return (
-    <instancedMesh
-      key={count}
-      ref={meshRef}
-      args={[SHARED_PARTICLE_GEO, SHARED_PARTICLE_MAT, count]}
-      dispose={null}
-      renderOrder={1}
-      frustumCulled={false}
-    />
+    <group>
+      <instancedMesh
+        key={`glow_${count}`}
+        ref={glowRef}
+        args={[SHARED_PARTICLE_GLOW_GEO, SHARED_PARTICLE_GLOW_MAT, count]}
+        dispose={null}
+        renderOrder={2}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        key={`core_${count}`}
+        ref={meshRef}
+        args={[SHARED_PARTICLE_GEO, SHARED_PARTICLE_MAT, count]}
+        dispose={null}
+        renderOrder={3}
+        frustumCulled={false}
+      />
+    </group>
   );
 }
 
@@ -188,6 +215,19 @@ export function WireMesh({
 
   const baseColor =
     NET_WIRE_COLORS[Math.abs(netIndex) % NET_WIRE_COLORS.length];
+  const wireColor = useMemo(() => {
+    const c = new THREE.Color(baseColor);
+    if (supplyOn && !ghost) {
+      const hsl = { h: 0, s: 0, l: 0 };
+      c.getHSL(hsl);
+      c.setHSL(
+        hsl.h,
+        Math.min(1, hsl.s * 1.25 + 0.08),
+        Math.min(0.65, hsl.l * 1.05),
+      );
+    }
+    return c;
+  }, [baseColor, supplyOn, ghost]);
   const isFlowing = !ghost && !dimmed && flowDirection !== 0;
 
   return (
@@ -203,7 +243,7 @@ export function WireMesh({
         ref={meshRef}
         geometry={geometry}
         castShadow={!ghost}
-        renderOrder={isFlowing ? 2 : 0}
+        renderOrder={isFlowing ? 1 : 0}
         onClick={(e) => {
           if (blockClick) return;
           e.stopPropagation();
@@ -225,17 +265,39 @@ export function WireMesh({
       >
         <meshStandardMaterial
           ref={matRef}
-          color={ghost ? '#38bdf8' : hovered ? '#ffffff' : baseColor}
+          color={ghost ? '#38bdf8' : hovered ? '#ffffff' : wireColor}
           emissive={
-            ghost ? '#0ea5e9' : highlighted || hovered ? baseColor : '#000000'
+            ghost
+              ? '#0ea5e9'
+              : highlighted || hovered || (supplyOn && !dimmed)
+                ? wireColor
+                : '#000000'
           }
           emissiveIntensity={
-            ghost ? 0.5 : highlighted ? 0.75 : hovered ? 0.6 : 0
+            ghost
+              ? 0.5
+              : highlighted
+                ? 0.75
+                : hovered
+                  ? 0.6
+                  : supplyOn && !dimmed
+                    ? 0.16
+                    : 0
           }
           roughness={0.4}
           metalness={0.1}
           transparent={ghost || dimmed || isFlowing}
-          opacity={ghost ? 0.65 : dimmed ? 0.16 : isFlowing ? 0.76 : 1}
+          opacity={
+            ghost
+              ? 0.65
+              : dimmed
+                ? 0.16
+                : isFlowing
+                  ? highlighted
+                    ? 0.55
+                    : 0.42
+                  : 1
+          }
           depthWrite={!ghost && !dimmed && !isFlowing}
         />
       </mesh>

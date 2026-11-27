@@ -1,5 +1,5 @@
 import { Html } from '@react-three/drei';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { findStageTerminalNetInfo, getStage } from '../core/circuit/stages';
 import { getExperiment } from '../core/experiments/registry';
 import type { TerminalDef, TerminalId } from '../core/types';
@@ -9,6 +9,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { useWiringStore } from '../stores/wiringStore';
 import { TERMINAL_SELECTED_COLOR } from '../theme/tokens';
 import { LabelPlate } from './LabelPlate';
+import { useHighlightedNetTerminals } from './NetHighlightContext';
 
 interface TerminalProps {
   componentId: string;
@@ -27,8 +28,10 @@ export function Terminal({
 }: TerminalProps) {
   const fullId: TerminalId = `${componentId}.${terminal.name}`;
   const [hovered, setHovered] = useState(false);
+  const lastPointerTypeRef = useRef<string>('mouse');
 
   const selectedTerminal = useWiringStore((s) => s.selectedTerminal);
+  const hoveredTerminal = useWiringStore((s) => s.hoveredTerminal);
   const clickTerminal = useWiringStore((s) => s.clickTerminal);
   const setHoveredTerminal = useWiringStore((s) => s.setHoveredTerminal);
   const showTerminalLabels = useSessionStore((s) => s.showTerminalLabels);
@@ -37,10 +40,10 @@ export function Terminal({
   const mode = useSessionStore((s) => s.mode);
   const activeProbeLead = useSessionStore((s) => s.activeProbeLead);
   const placeProbeLead = useSessionStore((s) => s.placeProbeLead);
-  const highlightedNetIndex = useSessionStore((s) => s.highlightedNetIndex);
   const highlightedNetPinned = useSessionStore((s) => s.highlightedNetPinned);
   const setHighlightedNetIndex = useSessionStore((s) => s.setHighlightedNetIndex);
   const clearHighlightedNet = useSessionStore((s) => s.clearHighlightedNet);
+  const highlightedNetTerminals = useHighlightedNetTerminals();
   const resolvedTheme = useThemeStore((s) => s.resolved);
   const supplyOn = useControlsStore((s) => s.supplyOn);
   const controlValues = useControlsStore((s) => s.values);
@@ -50,6 +53,28 @@ export function Terminal({
   const isSelected = !isLearnMode && !isObserveMode && selectedTerminal === fullId;
   const isProbeA = controlValues['probe.a'] === fullId;
   const isProbeB = controlValues['probe.b'] === fullId;
+  const isInspected = hovered || hoveredTerminal === fullId;
+  const showTooltip = isInspected || isSelected || isProbeA || isProbeB;
+  const [tooltipReady, setTooltipReady] = useState(false);
+
+  // Wait until drei's <Html distanceFactor> applies its initial scale transform
+  // before revealing the tooltip so it never flashes at unscaled 1:1 size.
+  useEffect(() => {
+    if (!showTooltip) {
+      setTooltipReady(false);
+      return;
+    }
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setTooltipReady(true);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [showTooltip]);
   const ringColor = UNIFORM_TERMINAL_COLOR;
   const highlightColor = resolvedTheme === 'dark' ? '#38bdf8' : '#0284c7';
 
@@ -60,32 +85,55 @@ export function Terminal({
     ? findStageTerminalNetInfo(currentStage, fullId)
     : null;
 
-  let isNetHighlighted = false;
-  let isNetDimmed = false;
-  if (isObserveMode && highlightedNetIndex !== null) {
-    const net = currentStage.acceptedNetlists[0]?.[highlightedNetIndex];
-    if (net) {
-      isNetHighlighted = net.includes(fullId);
-      isNetDimmed = !isNetHighlighted;
-    }
-  }
+  const isNetHighlighted =
+    highlightedNetTerminals !== null && highlightedNetTerminals.has(fullId);
+  const isNetDimmed =
+    highlightedNetTerminals !== null && !isNetHighlighted;
 
   return (
     <group position={terminal.localPos}>
       {/* Invisible larger hit sphere for reliable clicks and hover */}
       <mesh
         position={[0, 0, 0.03]}
+        onPointerDown={(e) => {
+          lastPointerTypeRef.current = e.pointerType;
+        }}
         onClick={(e) => {
           e.stopPropagation();
-          if (isLearnMode) return;
+          const isTouch = lastPointerTypeRef.current !== 'mouse';
+          if (isLearnMode) {
+            if (isTouch) {
+              setHoveredTerminal(hoveredTerminal === fullId ? null : fullId);
+            }
+            return;
+          }
           if (isProbeClickActive && activeProbeLead) {
             placeProbeLead(activeProbeLead, fullId);
+            if (isTouch) setHoveredTerminal(fullId);
             return;
+          }
+          if (isObserveMode && isTouch) {
+            if (hoveredTerminal === fullId) {
+              setHoveredTerminal(null);
+              clearHighlightedNet();
+            } else {
+              setHoveredTerminal(fullId);
+              if (observeNetInfo) {
+                setHighlightedNetIndex(observeNetInfo.netIndex, true);
+              } else {
+                clearHighlightedNet();
+              }
+            }
+            return;
+          }
+          if (isTouch) {
+            setHoveredTerminal(fullId);
           }
           clickTerminal(fullId, supplyOn);
         }}
         onPointerOver={(e) => {
           e.stopPropagation();
+          if (e.pointerType !== 'mouse') return;
           setHovered(true);
           setHoveredTerminal(fullId);
           if (isObserveMode && observeNetInfo && !highlightedNetPinned) {
@@ -99,6 +147,7 @@ export function Terminal({
         }}
         onPointerOut={(e) => {
           e.stopPropagation();
+          if (e.pointerType !== 'mouse') return;
           setHovered(false);
           setHoveredTerminal(null);
           if (isObserveMode && !highlightedNetPinned) {
@@ -124,7 +173,7 @@ export function Terminal({
                   ? highlightColor
                   : isSelected
                     ? TERMINAL_SELECTED_COLOR
-                    : hovered
+                    : isInspected
                       ? '#f59e0b'
                       : ringColor
           }
@@ -137,7 +186,7 @@ export function Terminal({
                   ? highlightColor
                   : isSelected
                     ? TERMINAL_SELECTED_COLOR
-                    : hovered
+                    : isInspected
                       ? '#b45309'
                       : '#000000'
           }
@@ -148,12 +197,12 @@ export function Terminal({
                 ? 0.8
                 : isSelected
                   ? 0.7
-                  : hovered
+                  : isInspected
                     ? 0.45
                     : 0
           }
-          transparent={isNetDimmed}
-          opacity={isNetDimmed ? 0.28 : 1}
+          transparent={isNetDimmed && !isSelected}
+          opacity={isNetDimmed && !isSelected ? 0.28 : 1}
           roughness={0.35}
           metalness={0.2}
         />
@@ -170,8 +219,8 @@ export function Terminal({
                 ? '#38bdf8'
                 : '#fbbf24'
           }
-          transparent={isNetDimmed}
-          opacity={isNetDimmed ? 0.3 : 1}
+          transparent={isNetDimmed && !isSelected}
+          opacity={isNetDimmed && !isSelected ? 0.3 : 1}
           metalness={0.75}
           roughness={0.25}
         />
@@ -192,11 +241,17 @@ export function Terminal({
       )}
 
       {/* Hover / selected tooltip */}
-      {(hovered || isSelected || isProbeA || isProbeB) && (
-        <Html position={[0, 0.14, 0.06]} center distanceFactor={8}>
+      {showTooltip && (
+        <Html
+          position={[0, 0.24, 0.08]}
+          center
+          distanceFactor={8}
+          wrapperClass="pointer-events-none"
+        >
           <div
-            className="pointer-events-none whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium shadow-lg"
+            className="pointer-events-none mb-2 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium shadow-lg"
             style={{
+              visibility: tooltipReady ? 'visible' : 'hidden',
               backgroundColor: 'var(--vml-tooltip-bg)',
               color: 'var(--vml-tooltip-text)',
               border: '1px solid var(--vml-tooltip-border)',
@@ -225,6 +280,14 @@ export function Terminal({
                 {observeNetInfo
                   ? observeNetInfo.label
                   : 'Open / unconnected in this stage'}
+              </div>
+            )}
+            {!isObserveMode && isNetHighlighted && highlightedNetTerminals && (
+              <div
+                className="mt-0.5 text-[10px] font-medium"
+                style={{ color: 'var(--vml-accent)' }}
+              >
+                Common potential ({highlightedNetTerminals.size} terminals)
               </div>
             )}
           </div>
