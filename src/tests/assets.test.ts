@@ -11,9 +11,9 @@ describe('Asset manifest schema and core helpers', () => {
     const parsed = AssetManifestSchema.safeParse(ASSET_MANIFEST);
     expect(parsed.success).toBe(true);
     expect(ASSET_MANIFEST.commonPdf?.src).toBe(
-      'experiments/common/general-instructions.pdf',
+      'experiments/common/lab-manual.pdf',
     );
-    expect(ASSET_MANIFEST.commonPdf?.title).toBe('General instructions (PDF)');
+    expect(ASSET_MANIFEST.commonPdf?.title).toBe('Lab Manual (PDF)');
   });
 
   it('returns safe empty defaults from getExperimentAssets when missing', () => {

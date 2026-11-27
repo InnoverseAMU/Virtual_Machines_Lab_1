@@ -50,7 +50,7 @@ describe('Asset manifest generator (scripts/generate-assets.mjs)', () => {
     const warnings = [];
 
     fs.mkdirSync(path.join(root, 'common'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'common', 'general-instructions.pdf'), 'pdf');
+    fs.writeFileSync(path.join(root, 'common', 'lab-manual.pdf'), 'pdf');
 
     // ex3-1 has both ex3-1.pdf and ex-3-1.pdf -> prefers ex3-1.pdf
     const ex31 = path.join(root, 'ex3-1');
@@ -87,8 +87,8 @@ describe('Asset manifest generator (scripts/generate-assets.mjs)', () => {
     });
 
     expect(manifest.commonPdf).toEqual({
-      src: 'experiments/common/general-instructions.pdf',
-      title: 'General instructions (PDF)',
+      src: 'experiments/common/lab-manual.pdf',
+      title: 'Lab Manual (PDF)',
     });
     expect(manifest.experiments['ex3.1'].pdf?.src).toBe(
       'experiments/ex3-1/ex3-1.pdf',

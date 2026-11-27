@@ -154,7 +154,7 @@
     }
   },
   "commonPdf": {
-    "src": "experiments/common/general-instructions.pdf",
-    "title": "General instructions (PDF)"
+    "src": "experiments/common/lab-manual.pdf",
+    "title": "Lab Manual (PDF)"
   }
 }
