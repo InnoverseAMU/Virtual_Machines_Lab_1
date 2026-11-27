@@ -1,0 +1,27 @@
+1
+00:00:00,450 --> 00:00:06,650
+Wire a transformer test, switch on, and watch the meters respond. All in 3D.
+
+2
+00:00:07,850 --> 00:00:11,900
+But in a real lab, high voltage means you rarely do the wiring.
+
+3
+00:00:11,950 --> 00:00:16,020
+You learn from a diagram, and one wrong connection can damage equipment.
+
+4
+00:00:16,050 --> 00:00:18,020
+Learn mode explains every step.
+
+5
+00:00:18,050 --> 00:00:21,320
+Self mode checks your wiring and shows what went wrong.
+
+6
+00:00:21,350 --> 00:00:24,550
+Take readings, plot curves, check your answers.
+
+7
+00:00:26,750 --> 00:00:29,980
+Virtual Machines Lab. Practise before you power on.

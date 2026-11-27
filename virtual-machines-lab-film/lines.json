@@ -1,0 +1,46 @@
+[
+  {
+    "id": "v1_hook",
+    "text": "Wire a transformer test, switch on, and watch the meters respond. All in three D.",
+    "asr": "Wire a transformer test, switch on, and watch the meters respond. All in 3D.",
+    "voice": "am_michael",
+    "speed": 1.02
+  },
+  {
+    "id": "v2_prob1",
+    "text": "But in a real lab, high voltage means you rarely do the wiring.",
+    "voice": "am_michael",
+    "speed": 1.12
+  },
+  {
+    "id": "v3_prob2",
+    "text": "You learn from a diagram, and one wrong connection can damage equipment.",
+    "voice": "am_michael",
+    "speed": 1.12
+  },
+  {
+    "id": "v4_learn",
+    "text": "Learn mode explains every step.",
+    "voice": "am_michael",
+    "speed": 1.04
+  },
+  {
+    "id": "v5_self",
+    "text": "Self mode checks your wiring and shows what went wrong.",
+    "voice": "am_michael",
+    "speed": 1.04
+  },
+  {
+    "id": "v6_obs",
+    "text": "Take readings, plot curves, check your answers.",
+    "voice": "am_michael",
+    "speed": 1.04
+  },
+  {
+    "id": "v7_end",
+    "text": "Virtual Machines Lab. Practise before you power on.",
+    "asr": "Virtual Machines Lab. Practice before you power on.",
+    "voice": "am_michael",
+    "speed": 1.10
+  }
+]
