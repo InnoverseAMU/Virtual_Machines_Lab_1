@@ -152,6 +152,22 @@ export function buildNets(
   };
 }
 
+/**
+ * Returns the set of terminals sharing a net (same potential / connected) with
+ * `terminalId`, or `null` if `terminalId` is null or isolated (only itself).
+ */
+export function getConnectedNetTerminals(
+  netGraph: NetGraph,
+  terminalId: TerminalId | null,
+): Set<TerminalId> | null {
+  if (!terminalId) return null;
+  const netIdx = netGraph.terminalToNetIndex.get(terminalId);
+  if (netIdx === undefined) return null;
+  const net = netGraph.nets[netIdx];
+  if (!net || net.length <= 1) return null;
+  return new Set(net);
+}
+
 export function collectInternalLinks(
   components: ComponentInstance[],
   controls: ControlValues = {},
