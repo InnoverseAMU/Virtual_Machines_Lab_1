@@ -228,6 +228,9 @@ interface SessionState {
   learnNoLoadAck: boolean;
   learnFinished: boolean;
 
+  // Observe mode step guide state
+  observeStepIndex: number;
+
   // View & UI prefs
   cameraPreset: CameraPreset | null;
   showTerminalLabels: boolean;
@@ -300,6 +303,7 @@ interface SessionState {
   clearPendingDualReading: () => void;
 
   setLearnStepIndex: (index: number) => void;
+  setObserveStepIndex: (index: number) => void;
   ackLearnReading: () => void;
   resetLearnAck: () => void;
   finishLearn: () => void;
@@ -378,6 +382,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   learnStepIndex: 0,
   learnNoLoadAck: false,
   learnFinished: false,
+  observeStepIndex: 0,
 
   cameraPreset: 'overview',
   showTerminalLabels: false,
@@ -425,6 +430,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
+      observeStepIndex: 0,
       cameraPreset: 'overview',
       toasts: [],
       diagramPanelOpen: false,
@@ -443,6 +449,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({
       currentStageIndex: clamped,
       observationRows: observationRowsByStage[stage.id] ?? [],
+      observeStepIndex: 0,
       highlightedNetIndex: null,
       highlightedNetPinned: false,
       cameraPreset: 'overview',
@@ -488,6 +495,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({
       currentStageIndex: clamped,
       observationRows: observationRowsByStage[stage.id] ?? [],
+      observeStepIndex: 0,
       highlightedNetIndex: null,
       highlightedNetPinned: false,
       activeProbeLead: null,
@@ -1063,6 +1071,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
   setLearnStepIndex: (learnStepIndex) => set({ learnStepIndex }),
 
+  setObserveStepIndex: (observeStepIndex) => set({ observeStepIndex }),
+
   ackLearnReading: () => set({ learnNoLoadAck: true }),
 
   resetLearnAck: () => set({ learnNoLoadAck: false }),
@@ -1109,6 +1119,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
+      observeStepIndex: 0,
       cameraPreset: 'overview',
       toasts: [],
     }),
@@ -1151,6 +1162,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       learnStepIndex: 0,
       learnNoLoadAck: false,
       learnFinished: false,
+      observeStepIndex: 0,
       cameraPreset: 'overview',
       toasts: [],
       diagramPanelOpen: false,

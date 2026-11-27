@@ -3,6 +3,7 @@ import {
   evaluateLearnStepCondition,
   findVariacForTargetV1,
 } from './core/circuit/learn';
+import { getObserveSteps } from './core/circuit/observe';
 import {
   getAllLearnSteps,
   getStage,
@@ -20,6 +21,7 @@ import {
   isSupplySwitchOn,
 } from './core/physics/evaluate';
 import { getPhysicsModel } from './core/physics/registry';
+import { MAX_OBSERVATION_ROWS } from './core/physics/report';
 import { BenchScene } from './scenes/BenchScene';
 import { useControlsStore } from './stores/controlsStore';
 import { enterLabMode } from './stores/modeActions';
@@ -30,6 +32,7 @@ import { ExperimentPicker } from './ui/ExperimentPicker';
 import { LearnPlayer } from './ui/LearnPlayer';
 import { Modal } from './ui/Modal';
 import { ModeSelect } from './ui/ModeSelect';
+import { ObservePlayer } from './ui/ObservePlayer';
 import { ExperimentPdfActions } from './ui/PdfActions';
 import { PdfPanel } from './ui/PdfPanel';
 import { ResultModal } from './ui/ResultModal';
@@ -68,6 +71,8 @@ export function App() {
   const learnStepIndex = useSessionStore((s) => s.learnStepIndex);
   const learnNoLoadAck = useSessionStore((s) => s.learnNoLoadAck);
   const learnFinished = useSessionStore((s) => s.learnFinished);
+  const observeStepIndex = useSessionStore((s) => s.observeStepIndex);
+  const pendingDualReading = useSessionStore((s) => s.pendingDualReading);
 
   const goToScreen = useSessionStore((s) => s.goToScreen);
   const setCurrentStageIndex = useSessionStore((s) => s.setCurrentStageIndex);
@@ -85,6 +90,8 @@ export function App() {
   const submitWiring = useSessionStore((s) => s.submitWiring);
   const openLastResult = useSessionStore((s) => s.openLastResult);
   const setLearnStepIndex = useSessionStore((s) => s.setLearnStepIndex);
+  const setObserveStepIndex = useSessionStore((s) => s.setObserveStepIndex);
+  const addObservationRow = useSessionStore((s) => s.addObservationRow);
   const ackLearnReading = useSessionStore((s) => s.ackLearnReading);
   const resetLearnAck = useSessionStore((s) => s.resetLearnAck);
   const finishLearn = useSessionStore((s) => s.finishLearn);
@@ -132,6 +139,15 @@ export function App() {
   const isSelf = mode === 'self';
   const learnSteps = useMemo(() => getAllLearnSteps(experiment), [experiment]);
   const currentLearnStep = learnSteps[learnStepIndex] ?? learnSteps[0];
+  const observeSteps = useMemo(
+    () => getObserveSteps(experiment.id, currentStage),
+    [experiment.id, currentStage],
+  );
+  const clampedObserveIndex = Math.min(
+    observeStepIndex,
+    Math.max(0, observeSteps.length - 1),
+  );
+  const currentObserveStep = observeSteps[clampedObserveIndex] ?? observeSteps[0];
 
   useEffect(() => {
     initFromControls(currentStage.controls, sessionSeed);
@@ -157,6 +173,50 @@ export function App() {
       learnNoLoadAck,
     );
   }, [isLearn, currentLearnStep, controlValues, evaluation.output, learnNoLoadAck]);
+
+  const observeDualSpec = currentStage.twoReadingCapture;
+  const observeDualSig = observeDualSpec
+    ? observeDualSpec.invalidationControlIds
+        .map((id) => String(controlValues[id] ?? ''))
+        .join('|')
+    : '';
+  const observeDualReady =
+    !observeDualSpec ||
+    Boolean(
+      pendingDualReading &&
+        pendingDualReading.signature === observeDualSig &&
+        pendingDualReading.first &&
+        pendingDualReading.second,
+    );
+  const observeCanAddRow =
+    isObserve &&
+    isSupplySwitchOn(controlValues) &&
+    evaluation.connectionState.energised &&
+    observeDualReady &&
+    observationRows.length < MAX_OBSERVATION_ROWS;
+
+  const observeReadyStatus = useMemo(() => {
+    if (!isObserve || !currentObserveStep) {
+      return { ready: false, statusText: '', recorded: false };
+    }
+    return currentObserveStep.evaluateReady({
+      controls: controlValues,
+      output: evaluation.output,
+      energised: evaluation.connectionState.energised,
+      dualReady: observeDualReady,
+      rows: observationRows,
+      params: currentStage.physicsParams,
+    });
+  }, [
+    isObserve,
+    currentObserveStep,
+    controlValues,
+    evaluation.output,
+    evaluation.connectionState.energised,
+    observeDualReady,
+    observationRows,
+    currentStage.physicsParams,
+  ]);
 
   // Scripted Learn-mode step controller: automatic stage switch + camera preset + staggered wire animation
   const wireTimersRef = useRef<number[]>([]);
@@ -1051,6 +1111,34 @@ export function App() {
             onReplay={handleReplayLearn}
             onTryYourself={handleTryYourself}
             onExit={() => setConfirmAction('exit-learn')}
+          />
+        ) : isObserve && currentObserveStep ? (
+          <ObservePlayer
+            stageTitle={hasMultipleStages ? currentStage.title : undefined}
+            step={currentObserveStep}
+            stepIndex={clampedObserveIndex}
+            totalSteps={observeSteps.length}
+            readyStatus={observeReadyStatus}
+            canAddRow={observeCanAddRow}
+            rowCount={observationRows.length}
+            diagramCount={experimentAssets.diagrams.length}
+            diagramPanelOpen={diagramPanelOpen}
+            onToggleDiagram={toggleDiagramPanel}
+            onAddRow={() =>
+              addObservationRow(
+                evaluation.output,
+                controlValues,
+                evaluation.connectionState.energised,
+              )
+            }
+            onNext={() =>
+              setObserveStepIndex(
+                Math.min(observeSteps.length - 1, clampedObserveIndex + 1),
+              )
+            }
+            onBack={() =>
+              setObserveStepIndex(Math.max(0, clampedObserveIndex - 1))
+            }
           />
         ) : isSelf ? (
           <SolutionBanner experiment={experiment} />

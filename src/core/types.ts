@@ -172,6 +172,31 @@ export interface LearnStep {
   completionCondition?: LearnStepCondition;
 }
 
+export interface ObserveReadyContext {
+  controls: ControlValues;
+  output: PhysicsSolveOutput;
+  energised: boolean;
+  dualReady: boolean;
+  rows: ObservationRow[];
+  params: Record<string, number>;
+}
+
+export interface ObserveReadyStatus {
+  ready: boolean;
+  statusText: string;
+  recorded: boolean;
+}
+
+export interface ObserveStep {
+  id: string;
+  which: string;
+  why: string;
+  when: string;
+  steps: string[];
+  camera?: CameraPreset;
+  evaluateReady: (ctx: ObserveReadyContext) => ObserveReadyStatus;
+}
+
 export type ObservationCellValue = number | boolean | string | null;
 export type ObservationRowValues = Record<string, ObservationCellValue>;
 
